@@ -26,6 +26,14 @@ export const Colors = {
 
 export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
 
+// Brand accents stay constant across light/dark mode.
+export const AccentColors = {
+  primary: '#208AEF',
+  success: '#1FA971',
+  danger: '#E5484D',
+  warning: '#F5A623',
+} as const;
+
 export const Fonts = Platform.select({
   ios: {
     /** iOS `UIFontDescriptorSystemDesignDefault` */

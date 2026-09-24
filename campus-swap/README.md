@@ -1,56 +1,82 @@
-# Welcome to your Expo app 👋
+# Campus Swap
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+A marketplace connecting local businesses with nearby shoppers: businesses post surplus or
+near-expiry inventory (bakery, produce, prepared food, etc.) at a discounted price, and shoppers
+browse, reserve, and pick it up in person.
 
-## Get started
+- **Frontend**: Expo (React Native + TypeScript), file-based routing via `expo-router`, runs on
+  iOS, Android, and web.
+- **Backend**: [Supabase](https://supabase.com) — Postgres database, auth, row-level security, and
+  file storage. There is no separate server to run; the app talks to Supabase directly.
+- **Checkout model**: reserve in-app, pay in person at pickup. There is no payment processor
+  integration in this version.
 
-1. Install dependencies
+## 1. Create a Supabase project
 
-   ```bash
-   npm install
-   ```
+1. Create a free project at [supabase.com](https://supabase.com).
+2. In the Supabase dashboard, open **SQL Editor → New query**, paste the contents of
+   [`supabase/schema.sql`](supabase/schema.sql), and run it. This creates all tables, row-level
+   security policies, the reservation functions, and the `listing-images` storage bucket.
+3. Open **Project settings → API** and copy the **Project URL** and **anon public** key.
+4. (Optional but recommended for testing) Under **Authentication → Providers → Email**, turn off
+   **Confirm email** so newly created accounts can sign in immediately. If you leave it on, new
+   users will see a "check your email" message and need to confirm before their first sign-in.
 
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## 2. Configure the app
 
 ```bash
-npm run reset-project
+cp .env.example .env
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Fill in `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` with the values from step 1.
 
-### Other setup steps
+## 3. Run it
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+```bash
+npm install
+npm run start   # then press i / a / w, or scan the QR code with Expo Go
+```
 
-## Learn more
+## How the app is organized
 
-To learn more about developing your project with Expo, look at the following resources:
+```
+supabase/schema.sql        Database schema, RLS policies, storage bucket (run once in Supabase)
+src/lib/supabase.ts        Supabase client
+src/lib/api/               Typed query functions (listings, reservations, profiles)
+src/context/auth-context.tsx  Session + profile state, sign in/up/out
+src/app/(auth)/            Sign in / sign up
+src/app/(tabs)/            Browse, My listings, Orders, Reservations, Profile
+                            (which tabs appear depends on whether you're a shopper or a business)
+src/app/listing/[id].tsx   Listing detail + reserve flow
+src/app/listing/new.tsx    Business: create a listing (photos, price, quantity, expiry)
+```
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+### Roles
 
-## Join the community
+Signing up asks whether you're **shopping** or **running a business**. That choice sets the
+`role` column on your `profiles` row (via signup metadata, read by a Postgres trigger — see
+`handle_new_user()` in the schema) and determines which tabs and actions you see:
 
-Join our community of developers creating universal apps.
+- **Business**: post listings, manage them (archive/reactivate), and view/advance incoming
+  reservations (pending → ready → completed, or cancel).
+- **Shopper**: browse and filter listings, reserve a quantity, and manage/cancel their own
+  reservations.
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+### Reservation flow
+
+All reservation writes go through two Postgres functions (`create_reservation`,
+`update_reservation_status`) rather than plain table writes, so that a listing's available
+quantity is always adjusted atomically — no overselling under concurrent reservations, and
+cancelling restores stock. See the comments in `supabase/schema.sql` for details.
+
+## Known limitations / natural next steps
+
+- **No real payments** — reservations are pay-in-person by design (see checkout model above).
+  Adding Stripe Connect would be the natural next step for real transactions.
+- **Expiry is set as "hours from now"** at listing-creation time rather than a full date/time
+  picker, to avoid an extra native dependency. `@react-native-community/datetimepicker` would be
+  the natural upgrade.
+- **No distance-based sorting** — listings show the business's address as text; there's no GPS
+  distance calculation or map view yet.
+- **Listings can't be edited after creation**, only archived/reactivated. Editing would reuse most
+  of `src/app/listing/new.tsx`.
