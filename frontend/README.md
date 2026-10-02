@@ -1,4 +1,4 @@
-# Campus Swap
+# FinalBatch
 
 A marketplace connecting local businesses with nearby shoppers: businesses post surplus or
 near-expiry inventory (bakery, produce, prepared food, etc.) at a discounted price, and shoppers
