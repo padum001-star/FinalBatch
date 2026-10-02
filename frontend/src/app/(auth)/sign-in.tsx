@@ -36,7 +36,7 @@ export default function SignInScreen() {
           <ScrollView style={styles.flex} contentContainerStyle={styles.scrollContent}>
             <ThemedView style={styles.container}>
               <ThemedText type="title" style={styles.title}>
-                Campus Swap
+                FinalBatch
               </ThemedText>
               <ThemedText themeColor="textSecondary" style={styles.subtitle}>
                 Grab surplus and near-expiry finds from local businesses at a discount.
