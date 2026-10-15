@@ -18,6 +18,7 @@ const COLORS = {
   charcoalSoft: '#5C6B62',
   wheat: '#F0B429',
   line: '#E1E7DC',
+  error: '#D93025',
 };
 
 export default function App() {
@@ -25,8 +26,21 @@ export default function App() {
   const pillX = useRef(new Animated.Value(0)).current;
   const ctaScale = useRef(new Animated.Value(1)).current;
 
+  // Form state — controlled inputs
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+
+  // Error state — one message per field
+  const [errors, setErrors] = useState({ name: '', email: '', password: '' });
+
   function switchMode(next) {
     if (next === mode) return;
+    // Clear form and errors when switching tabs
+    setName('');
+    setEmail('');
+    setPassword('');
+    setErrors({ name: '', email: '', password: '' });
     LayoutAnimation.configureNext(
       LayoutAnimation.create(250, LayoutAnimation.Types.easeInEaseOut, LayoutAnimation.Properties.opacity)
     );
@@ -46,6 +60,43 @@ export default function App() {
     Animated.timing(ctaScale, { toValue: 1, duration: 120, useNativeDriver: true }).start();
   }
 
+  // Returns true if all fields pass validation
+  function validate() {
+    const newErrors = { name: '', email: '', password: '' };
+    let valid = true;
+
+    if (mode === 'signup' && name.trim().length === 0) {
+      newErrors.name = 'Please enter your name.';
+      valid = false;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (email.trim().length === 0) {
+      newErrors.email = 'Email is required.';
+      valid = false;
+    } else if (!emailRegex.test(email.trim())) {
+      newErrors.email = 'Please enter a valid email address (e.g. you@email.com).';
+      valid = false;
+    }
+
+    if (password.length === 0) {
+      newErrors.password = 'Password is required.';
+      valid = false;
+    } else if (password.length < 6) {
+      newErrors.password = 'Password must be at least 6 characters.';
+      valid = false;
+    }
+
+    setErrors(newErrors);
+    return valid;
+  }
+
+  function handleSubmit() {
+    if (!validate()) return;
+    // TODO: connect to backend (POST /signup or POST /login)
+    alert(mode === 'signup' ? 'Account created!' : 'Logged in!');
+  }
+
   return (
     <SafeAreaView style={styles.screen}>
       <StatusBar style="dark" />
@@ -54,14 +105,14 @@ export default function App() {
         <Text style={styles.sub}>
           {mode === 'signup'
             ? 'Create an account to start claiming food nearby.'
-            : 'Welcome back — log in to see what’s available.'}
+            : 'Welcome back — log in to see what\u2019s available.'}
         </Text>
 
         <View style={styles.tabs}>
           <Animated.View
             style={[
               styles.tabBg,
-              { transform: [{ translateX: pillX.interpolate({ inputRange: [0, 1], outputRange: [0, 140] }) }] },
+              { transform: [{ translateX: pillX.interpolate({ inputRange: [0, 1], outputRange: [0, 160] }) }] },
             ]}
           />
           <TouchableOpacity style={styles.tab} onPress={() => switchMode('signup')}>
@@ -75,32 +126,54 @@ export default function App() {
         {mode === 'signup' && (
           <View style={styles.field}>
             <Text style={styles.label}>Name</Text>
-            <TextInput style={styles.input} placeholder="Your name" placeholderTextColor={COLORS.charcoalSoft} />
+            <TextInput
+              style={[styles.input, errors.name ? styles.inputError : null]}
+              placeholder="Your name"
+              placeholderTextColor={COLORS.charcoalSoft}
+              value={name}
+              onChangeText={(text) => {
+                setName(text);
+                if (errors.name) setErrors((e) => ({ ...e, name: '' }));
+              }}
+            />
+            {errors.name ? <Text style={styles.errorText}>{errors.name}</Text> : null}
           </View>
         )}
 
         <View style={styles.field}>
           <Text style={styles.label}>Email</Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, errors.email ? styles.inputError : null]}
             placeholder="you@email.com"
             placeholderTextColor={COLORS.charcoalSoft}
             keyboardType="email-address"
             autoCapitalize="none"
+            value={email}
+            onChangeText={(text) => {
+              setEmail(text);
+              if (errors.email) setErrors((e) => ({ ...e, email: '' }));
+            }}
           />
+          {errors.email ? <Text style={styles.errorText}>{errors.email}</Text> : null}
         </View>
 
         <View style={styles.field}>
           <Text style={styles.label}>Password</Text>
           <TextInput
-            style={styles.input}
-            placeholder="••••••••"
+            style={[styles.input, errors.password ? styles.inputError : null]}
+            placeholder="\u00b7\u00b7\u00b7\u00b7\u00b7\u00b7\u00b7\u00b7"
             placeholderTextColor={COLORS.charcoalSoft}
             secureTextEntry
+            value={password}
+            onChangeText={(text) => {
+              setPassword(text);
+              if (errors.password) setErrors((e) => ({ ...e, password: '' }));
+            }}
           />
+          {errors.password ? <Text style={styles.errorText}>{errors.password}</Text> : null}
         </View>
 
-        <TouchableOpacity activeOpacity={1} onPressIn={pressIn} onPressOut={pressOut}>
+        <TouchableOpacity activeOpacity={1} onPressIn={pressIn} onPressOut={pressOut} onPress={handleSubmit}>
           <Animated.View style={[styles.cta, { transform: [{ scale: ctaScale }] }]}>
             <Text style={styles.ctaText}>{mode === 'signup' ? 'Create account' : 'Log in'}</Text>
           </Animated.View>
@@ -132,7 +205,7 @@ const styles = StyleSheet.create({
   sub: { color: COLORS.charcoalSoft, fontSize: 14, marginBottom: 24, lineHeight: 20 },
   tabs: { flexDirection: 'row', backgroundColor: COLORS.line, borderRadius: 12, padding: 4, marginBottom: 28, position: 'relative' },
   tabBg: {
-    position: 'absolute', top: 4, bottom: 4, left: 4, width: 140,
+    position: 'absolute', top: 4, bottom: 4, left: 4, width: 160,
     backgroundColor: COLORS.card, borderRadius: 9, elevation: 2,
     shadowColor: '#142820', shadowOpacity: 0.12, shadowRadius: 3, shadowOffset: { width: 0, height: 1 },
   },
@@ -142,6 +215,8 @@ const styles = StyleSheet.create({
   field: { marginBottom: 16 },
   label: { fontSize: 12, fontWeight: '700', color: COLORS.charcoalSoft, marginBottom: 6 },
   input: { paddingVertical: 13, paddingHorizontal: 14, borderRadius: 11, borderWidth: 1.5, borderColor: COLORS.line, backgroundColor: COLORS.card, fontSize: 15, color: COLORS.charcoal },
+  inputError: { borderColor: COLORS.error },
+  errorText: { marginTop: 5, fontSize: 12, color: COLORS.error, fontWeight: '600' },
   cta: { marginTop: 8, paddingVertical: 15, borderRadius: 12, backgroundColor: COLORS.ember, alignItems: 'center' },
   ctaText: { color: '#fff', fontSize: 15, fontWeight: '700' },
   divider: { flexDirection: 'row', alignItems: 'center', marginVertical: 22 },
