@@ -1,12 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  SafeAreaView, Animated, TextInput, StatusBar, Dimensions,
+  Animated, TextInput, StatusBar, Dimensions,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
-const { width } = Dimensions.get('window');
+  const { width } = Dimensions.get('window');
 
-const COLORS = {
+  const COLORS = {
   fern:         '#1F4D3D',
   ember:        '#E85A34',
   sage:         '#F5F7F0',
