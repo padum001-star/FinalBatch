@@ -1,13 +1,20 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Animated, TextInput, StatusBar, Dimensions,
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Animated,
+  TextInput,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
 
-  const { width } = Dimensions.get('window');
+const { width } = Dimensions.get('window');
 
-  const COLORS = {
+const COLORS = {
   fern:         '#1F4D3D',
   ember:        '#E85A34',
   sage:         '#F5F7F0',
@@ -103,7 +110,10 @@ function ListingCard({ item, index }) {
     <Animated.View
       style={{
         opacity: anim,
-        transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }, { scale }],
+        transform: [
+          { translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) },
+          { scale },
+        ],
       }}
     >
       <TouchableOpacity activeOpacity={1} onPressIn={pressIn} onPressOut={pressOut}>
@@ -165,13 +175,16 @@ export default function HomeScreen() {
   const headerAnim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.spring(headerAnim, {
-      toValue: 1, damping: 22, stiffness: 160, useNativeDriver: true,
+      toValue: 1,
+      damping: 22,
+      stiffness: 160,
+      useNativeDriver: true,
     }).start();
   }, []);
 
   return (
     <SafeAreaView style={styles.screen}>
-      <StatusBar barStyle="dark-content" backgroundColor={COLORS.sage} />
+      <StatusBar style="dark" />
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
 
@@ -181,7 +194,7 @@ export default function HomeScreen() {
             styles.header,
             {
               opacity: headerAnim,
-              transform: [{ translateY: headerAnim.interpolate({ inputRange: [0,1], outputRange: [-12, 0] }) }],
+              transform: [{ translateY: headerAnim.interpolate({ inputRange: [0, 1], outputRange: [-12, 0] }) }],
             },
           ]}
         >

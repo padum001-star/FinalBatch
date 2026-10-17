@@ -1,13 +1,18 @@
 import React, { useEffect, useRef } from 'react';
 import {
-  View, Text, StyleSheet, Animated, TouchableOpacity,
-  StatusBar, Dimensions,
+  View,
+  Text,
+  StyleSheet,
+  Animated,
+  TouchableOpacity,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
 
-  const { width } = Dimensions.get('window');
+const { width } = Dimensions.get('window');
 
-  const COLORS = {
+const COLORS = {
   fern:         '#1F4D3D',
   ember:        '#E85A34',
   sage:         '#F5F7F0',
@@ -68,7 +73,7 @@ export default function OnboardingScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.screen}>
-      <StatusBar barStyle="light-content" backgroundColor={COLORS.charcoal} />
+      <StatusBar style="light" />
 
       {/* Decorative background circles */}
       <View style={styles.circleLarge} />
@@ -85,15 +90,18 @@ export default function OnboardingScreen({ navigation }) {
         </Animated.View>
 
         {/* Headline */}
-        <Animated.Text style={[styles.headline, animStyle(headline, 32)]}>
-          {'Good food.\nNear you.\nBefore it\u2019s gone.'}
-        </Animated.Text>
+        <Animated.View style={animStyle(headline, 32)}>
+          <Text style={styles.headline}>
+            {'Good food.\nNear you.\nBefore it\u2019s gone.'}
+          </Text>
+        </Animated.View>
 
         {/* Sub */}
-        <Animated.Text style={[styles.sub, animStyle(sub, 24)]}>
-          Vendors post their surplus. You pick it up
-          fresh — at a fraction of the price.
-        </Animated.Text>
+        <Animated.View style={animStyle(sub, 24)}>
+          <Text style={styles.sub}>
+            Vendors post their surplus. You pick it up fresh — at a fraction of the price.
+          </Text>
+        </Animated.View>
 
         {/* Feature pills */}
         <View style={styles.pills}>

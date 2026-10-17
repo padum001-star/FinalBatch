@@ -1,12 +1,20 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity,
-  StyleSheet, Animated, Easing, Platform, UIManager, LayoutAnimation,
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  Animated,
+  Easing,
+  Platform,
+  UIManager,
+  LayoutAnimation,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 
-  if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
@@ -91,8 +99,7 @@ export default function AuthScreen({ route, navigation }) {
 
   function handleSubmit() {
     if (!validate()) return;
-    // TODO: POST to /signup or /login Lambda, then navigate based on role (RBAC)
-    // For now, navigate to the Home screen to demonstrate the flow
+    // Navigates to Home screen
     navigation.replace('Home');
   }
 
