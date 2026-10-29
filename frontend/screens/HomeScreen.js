@@ -15,14 +15,14 @@ import { StatusBar } from 'expo-status-bar';
 const { width } = Dimensions.get('window');
 
 const COLORS = {
-  fern:         '#1F4D3D',
-  ember:        '#E85A34',
-  sage:         '#F5F7F0',
-  card:         '#FFFFFF',
-  charcoal:     '#1C2620',
+  fern: '#1F4D3D',
+  ember: '#E85A34',
+  sage: '#F5F7F0',
+  card: '#FFFFFF',
+  charcoal: '#1C2620',
   charcoalSoft: '#5C6B62',
-  wheat:        '#F0B429',
-  line:         '#E1E7DC',
+  wheat: '#F0B429',
+  line: '#E1E7DC',
 };
 
 const CATEGORIES = ['All', 'Bakery', 'Café', 'Restaurant', 'Produce', 'Meals'];
@@ -101,8 +101,8 @@ function ListingCard({ item, index }) {
   }, []);
 
   const scale = useRef(new Animated.Value(1)).current;
-  function pressIn()  { Animated.spring(scale, { toValue: 0.97, useNativeDriver: true }).start(); }
-  function pressOut() { Animated.spring(scale, { toValue: 1,    useNativeDriver: true }).start(); }
+  function pressIn() { Animated.spring(scale, { toValue: 0.97, useNativeDriver: true }).start(); }
+  function pressOut() { Animated.spring(scale, { toValue: 1, useNativeDriver: true }).start(); }
 
   const discount = Math.round((1 - item.price / item.originalPrice) * 100);
 
@@ -202,7 +202,7 @@ export default function HomeScreen() {
             <Text style={styles.greeting}>Good morning 👋</Text>
             <View style={styles.locationRow}>
               <Text style={styles.locationPin}>📍</Text>
-              <Text style={styles.locationText}>Toronto, ON</Text>
+              <Text style={styles.locationText}>Plattsburgh, NY</Text>
             </View>
           </View>
           <View style={styles.avatar}>
@@ -273,8 +273,8 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen:   { flex: 1, backgroundColor: COLORS.sage },
-  scroll:   { paddingBottom: 40 },
+  screen: { flex: 1, backgroundColor: COLORS.sage },
+  scroll: { paddingBottom: 40 },
 
   // Header
   header: {
@@ -285,10 +285,10 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingBottom: 16,
   },
-  greeting:    { fontSize: 22, fontWeight: '800', color: COLORS.charcoal, letterSpacing: -0.4 },
+  greeting: { fontSize: 22, fontWeight: '800', color: COLORS.charcoal, letterSpacing: -0.4 },
   locationRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
   locationPin: { fontSize: 12, marginRight: 3 },
-  locationText:{ fontSize: 13, color: COLORS.charcoalSoft, fontWeight: '600' },
+  locationText: { fontSize: 13, color: COLORS.charcoalSoft, fontWeight: '600' },
   avatar: {
     width: 42, height: 42, borderRadius: 21,
     backgroundColor: COLORS.fern, alignItems: 'center', justifyContent: 'center',
@@ -309,7 +309,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.line,
     gap: 8,
   },
-  searchIcon:  { fontSize: 15 },
+  searchIcon: { fontSize: 15 },
   searchInput: { flex: 1, fontSize: 15, color: COLORS.charcoal },
 
   // Categories
@@ -321,7 +321,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5, borderColor: COLORS.line,
   },
   catPillActive: { backgroundColor: COLORS.fern, borderColor: COLORS.fern },
-  catText:       { fontSize: 13, fontWeight: '700', color: COLORS.charcoalSoft },
+  catText: { fontSize: 13, fontWeight: '700', color: COLORS.charcoalSoft },
   catTextActive: { color: COLORS.sage },
 
   // Section header
@@ -347,39 +347,39 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
     elevation: 2,
   },
-  cardAccent:      { width: 4 },
+  cardAccent: { width: 4 },
   cardEmoji: {
     width: 56, alignItems: 'center', justifyContent: 'center',
     backgroundColor: '#FAFAFA',
   },
-  cardEmojiText:   { fontSize: 24 },
-  cardContent:     { flex: 1, padding: 13 },
-  cardTopRow:      { flexDirection: 'row', alignItems: 'center', marginBottom: 2 },
-  cardName:        { flex: 1, fontSize: 15, fontWeight: '800', color: COLORS.charcoal, letterSpacing: -0.2 },
+  cardEmojiText: { fontSize: 24 },
+  cardContent: { flex: 1, padding: 13 },
+  cardTopRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 2 },
+  cardName: { flex: 1, fontSize: 15, fontWeight: '800', color: COLORS.charcoal, letterSpacing: -0.2 },
   discountBadge: {
     backgroundColor: 'rgba(31,77,61,0.1)',
     paddingHorizontal: 7, paddingVertical: 3,
     borderRadius: 6, marginLeft: 6,
   },
-  discountText:    { fontSize: 11, fontWeight: '800', color: COLORS.fern },
-  cardVendor:      { fontSize: 12, color: COLORS.charcoalSoft, fontWeight: '500', marginBottom: 10 },
-  cardBottomRow:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  priceRow:        { flexDirection: 'row', alignItems: 'baseline', gap: 5 },
-  price:           { fontSize: 17, fontWeight: '800', color: COLORS.charcoal },
-  originalPrice:   { fontSize: 13, color: COLORS.charcoalSoft, textDecorationLine: 'line-through' },
+  discountText: { fontSize: 11, fontWeight: '800', color: COLORS.fern },
+  cardVendor: { fontSize: 12, color: COLORS.charcoalSoft, fontWeight: '500', marginBottom: 10 },
+  cardBottomRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  priceRow: { flexDirection: 'row', alignItems: 'baseline', gap: 5 },
+  price: { fontSize: 17, fontWeight: '800', color: COLORS.charcoal },
+  originalPrice: { fontSize: 13, color: COLORS.charcoalSoft, textDecorationLine: 'line-through' },
   pickupBadge: {
     backgroundColor: 'rgba(240,180,41,0.15)',
     paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8,
   },
-  pickupText:  { fontSize: 11, fontWeight: '700', color: '#8A5E0C' },
-  cardMeta:    { flexDirection: 'row', alignItems: 'center', marginTop: 8, gap: 4 },
-  metaText:    { fontSize: 11, color: COLORS.charcoalSoft, fontWeight: '600' },
-  metaDot:     { fontSize: 11, color: COLORS.charcoalSoft },
+  pickupText: { fontSize: 11, fontWeight: '700', color: '#8A5E0C' },
+  cardMeta: { flexDirection: 'row', alignItems: 'center', marginTop: 8, gap: 4 },
+  metaText: { fontSize: 11, color: COLORS.charcoalSoft, fontWeight: '600' },
+  metaDot: { fontSize: 11, color: COLORS.charcoalSoft },
 
   // Empty state
   empty: { alignItems: 'center', paddingVertical: 40 },
   emptyEmoji: { fontSize: 40, marginBottom: 10 },
-  emptyText:  { fontSize: 14, color: COLORS.charcoalSoft, fontWeight: '600' },
+  emptyText: { fontSize: 14, color: COLORS.charcoalSoft, fontWeight: '600' },
 
   // Banner
   banner: {
@@ -389,7 +389,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12, paddingHorizontal: 16,
     borderRadius: 12,
   },
-  bannerDot:  { width: 7, height: 7, borderRadius: 4, backgroundColor: COLORS.wheat, marginRight: 10 },
+  bannerDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: COLORS.wheat, marginRight: 10 },
   bannerText: { fontSize: 13, color: '#7A520A', lineHeight: 18 },
   bannerBold: { fontWeight: '800' },
 });

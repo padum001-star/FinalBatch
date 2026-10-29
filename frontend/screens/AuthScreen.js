@@ -19,32 +19,32 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 }
 
 const COLORS = {
-  fern:         '#1F4D3D',
-  ember:        '#E85A34',
-  sage:         '#F5F7F0',
-  card:         '#FFFFFF',
-  charcoal:     '#1C2620',
+  fern: '#1F4D3D',
+  ember: '#E85A34',
+  sage: '#F5F7F0',
+  card: '#FFFFFF',
+  charcoal: '#1C2620',
   charcoalSoft: '#5C6B62',
-  wheat:        '#F0B429',
-  line:         '#E1E7DC',
-  error:        '#D93025',
+  wheat: '#F0B429',
+  line: '#E1E7DC',
+  error: '#D93025',
 };
 
 export default function AuthScreen({ route, navigation }) {
   // Read which tab to open from the onboarding screen
   const initialMode = route?.params?.initialMode ?? 'signup';
 
-  const [mode, setMode]         = useState(initialMode);
-  const pillX                   = useRef(new Animated.Value(initialMode === 'signup' ? 0 : 1)).current;
-  const ctaScale                = useRef(new Animated.Value(1)).current;
+  const [mode, setMode] = useState(initialMode);
+  const pillX = useRef(new Animated.Value(initialMode === 'signup' ? 0 : 1)).current;
+  const ctaScale = useRef(new Animated.Value(1)).current;
 
   // Form state
-  const [name, setName]         = useState('');
-  const [email, setEmail]       = useState('');
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
   // Error state
-  const [errors, setErrors]     = useState({ name: '', email: '', password: '' });
+  const [errors, setErrors] = useState({ name: '', email: '', password: '' });
 
   function switchMode(next) {
     if (next === mode) return;
@@ -64,43 +64,73 @@ export default function AuthScreen({ route, navigation }) {
     setMode(next);
   }
 
-  function pressIn()  { Animated.timing(ctaScale, { toValue: 0.97, duration: 100,  useNativeDriver: true }).start(); }
-  function pressOut() { Animated.timing(ctaScale, { toValue: 1,    duration: 120,  useNativeDriver: true }).start(); }
+  function pressIn() { Animated.timing(ctaScale, { toValue: 0.97, duration: 100, useNativeDriver: true }).start(); }
+  function pressOut() { Animated.timing(ctaScale, { toValue: 1, duration: 120, useNativeDriver: true }).start(); }
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  function getFieldError(field, val) {
+    if (field === 'name') {
+      if (mode === 'signup' && (!val || val.trim().length === 0)) {
+        return 'Please enter your name.';
+      }
+    } else if (field === 'email') {
+      const trimmed = (val ?? '').trim();
+      if (trimmed.length === 0) {
+        return 'Email is required.';
+      } else if (!emailRegex.test(trimmed)) {
+        return 'Please enter a valid email address (e.g. you@email.com).';
+      }
+    } else if (field === 'password') {
+      if (!val || val.length === 0) {
+        return 'Password is required.';
+      } else if (val.length < 6) {
+        return 'Password must be at least 6 characters.';
+      }
+    }
+    return '';
+  }
+
+  function handleBlur(field) {
+    const val = field === 'name' ? name : field === 'email' ? email : password;
+    const errorMsg = getFieldError(field, val);
+    setErrors((prev) => ({ ...prev, [field]: errorMsg }));
+  }
+
+  function handleChange(field, text) {
+    if (field === 'name') setName(text);
+    if (field === 'email') setEmail(text);
+    if (field === 'password') setPassword(text);
+
+    // If there is currently an error displayed for this field, re-check as they type
+    // so the error disappears as soon as they fix the format
+    if (errors[field]) {
+      const currentError = getFieldError(field, text);
+      setErrors((prev) => ({ ...prev, [field]: currentError }));
+    }
+  }
 
   function validate() {
-    const newErrors = { name: '', email: '', password: '' };
-    let valid = true;
-
-    if (mode === 'signup' && name.trim().length === 0) {
-      newErrors.name = 'Please enter your name.';
-      valid = false;
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (email.trim().length === 0) {
-      newErrors.email = 'Email is required.';
-      valid = false;
-    } else if (!emailRegex.test(email.trim())) {
-      newErrors.email = 'Please enter a valid email address (e.g. you@email.com).';
-      valid = false;
-    }
-
-    if (password.length === 0) {
-      newErrors.password = 'Password is required.';
-      valid = false;
-    } else if (password.length < 6) {
-      newErrors.password = 'Password must be at least 6 characters.';
-      valid = false;
-    }
+    const newErrors = {
+      name: mode === 'signup' ? getFieldError('name', name) : '',
+      email: getFieldError('email', email),
+      password: getFieldError('password', password),
+    };
 
     setErrors(newErrors);
-    return valid;
+    const hasErrors = Object.values(newErrors).some((err) => err.length > 0);
+    return !hasErrors;
   }
 
   function handleSubmit() {
+    // If any validation errors exist, halt immediately — no API call, no navigation
     if (!validate()) return;
-    // Navigates to Home screen
-    navigation.replace('Home');
+
+    // Reset the entire navigation stack so the user can't swipe back to Onboarding/Auth
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'Home' }],
+    });
   }
 
   return (
@@ -141,10 +171,8 @@ export default function AuthScreen({ route, navigation }) {
               placeholder="Your name"
               placeholderTextColor={COLORS.charcoalSoft}
               value={name}
-              onChangeText={(text) => {
-                setName(text);
-                if (errors.name) setErrors((e) => ({ ...e, name: '' }));
-              }}
+              onChangeText={(text) => handleChange('name', text)}
+              onBlur={() => handleBlur('name')}
             />
             {errors.name ? <Text style={styles.errorText}>{errors.name}</Text> : null}
           </View>
@@ -159,10 +187,8 @@ export default function AuthScreen({ route, navigation }) {
             keyboardType="email-address"
             autoCapitalize="none"
             value={email}
-            onChangeText={(text) => {
-              setEmail(text);
-              if (errors.email) setErrors((e) => ({ ...e, email: '' }));
-            }}
+            onChangeText={(text) => handleChange('email', text)}
+            onBlur={() => handleBlur('email')}
           />
           {errors.email ? <Text style={styles.errorText}>{errors.email}</Text> : null}
         </View>
@@ -175,10 +201,8 @@ export default function AuthScreen({ route, navigation }) {
             placeholderTextColor={COLORS.charcoalSoft}
             secureTextEntry
             value={password}
-            onChangeText={(text) => {
-              setPassword(text);
-              if (errors.password) setErrors((e) => ({ ...e, password: '' }));
-            }}
+            onChangeText={(text) => handleChange('password', text)}
+            onBlur={() => handleBlur('password')}
           />
           {errors.password ? <Text style={styles.errorText}>{errors.password}</Text> : null}
         </View>
@@ -196,7 +220,7 @@ export default function AuthScreen({ route, navigation }) {
         </View>
 
         <TouchableOpacity style={styles.ghostBtn}>
-          <Text style={styles.ghostBtnText}>Continue with Apple</Text>
+          <Text style={styles.ghostBtnText}>Continue with Google</Text>
         </TouchableOpacity>
 
         <View style={styles.badge}>
@@ -209,32 +233,32 @@ export default function AuthScreen({ route, navigation }) {
 }
 
 const styles = StyleSheet.create({
-  screen:        { flex: 1, backgroundColor: '#E9EDE3', alignItems: 'center', justifyContent: 'center' },
-  card:          { width: '100%', maxWidth: 375, flex: 1, backgroundColor: COLORS.sage, padding: 24, paddingTop: 40 },
-  brand:         { fontWeight: '800', fontSize: 19, color: COLORS.fern, marginBottom: 6 },
-  sub:           { color: COLORS.charcoalSoft, fontSize: 14, marginBottom: 24, lineHeight: 20 },
-  tabs:          { flexDirection: 'row', backgroundColor: COLORS.line, borderRadius: 12, padding: 4, marginBottom: 28, position: 'relative' },
+  screen: { flex: 1, backgroundColor: '#E9EDE3', alignItems: 'center', justifyContent: 'center' },
+  card: { width: '100%', maxWidth: 375, flex: 1, backgroundColor: COLORS.sage, padding: 24, paddingTop: 40 },
+  brand: { fontWeight: '800', fontSize: 19, color: COLORS.fern, marginBottom: 6 },
+  sub: { color: COLORS.charcoalSoft, fontSize: 14, marginBottom: 24, lineHeight: 20 },
+  tabs: { flexDirection: 'row', backgroundColor: COLORS.line, borderRadius: 12, padding: 4, marginBottom: 28, position: 'relative' },
   tabBg: {
     position: 'absolute', top: 4, bottom: 4, left: 4, width: 160,
     backgroundColor: COLORS.card, borderRadius: 9, elevation: 2,
     shadowColor: '#142820', shadowOpacity: 0.12, shadowRadius: 3, shadowOffset: { width: 0, height: 1 },
   },
-  tab:           { flex: 1, alignItems: 'center', paddingVertical: 10, zIndex: 1 },
-  tabText:       { fontSize: 14, fontWeight: '700', color: COLORS.charcoalSoft },
+  tab: { flex: 1, alignItems: 'center', paddingVertical: 10, zIndex: 1 },
+  tabText: { fontSize: 14, fontWeight: '700', color: COLORS.charcoalSoft },
   tabTextActive: { color: COLORS.fern },
-  field:         { marginBottom: 16 },
-  label:         { fontSize: 12, fontWeight: '700', color: COLORS.charcoalSoft, marginBottom: 6 },
-  input:         { paddingVertical: 13, paddingHorizontal: 14, borderRadius: 11, borderWidth: 1.5, borderColor: COLORS.line, backgroundColor: COLORS.card, fontSize: 15, color: COLORS.charcoal },
-  inputError:    { borderColor: COLORS.error },
-  errorText:     { marginTop: 5, fontSize: 12, color: COLORS.error, fontWeight: '600' },
-  cta:           { marginTop: 8, paddingVertical: 15, borderRadius: 12, backgroundColor: COLORS.ember, alignItems: 'center' },
-  ctaText:       { color: '#fff', fontSize: 15, fontWeight: '700' },
-  divider:       { flexDirection: 'row', alignItems: 'center', marginVertical: 22 },
-  dividerLine:   { flex: 1, height: 1, backgroundColor: COLORS.line },
-  dividerText:   { marginHorizontal: 10, color: COLORS.charcoalSoft, fontSize: 12 },
-  ghostBtn:      { paddingVertical: 13, borderRadius: 12, borderWidth: 1.5, borderColor: COLORS.line, backgroundColor: COLORS.card, alignItems: 'center' },
-  ghostBtnText:  { fontWeight: '700', fontSize: 14, color: COLORS.charcoal },
-  badge:         { marginTop: 'auto', flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', backgroundColor: 'rgba(240,180,41,0.18)', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 999 },
-  dot:           { width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.wheat, marginRight: 8 },
-  badgeText:     { fontSize: 12, fontWeight: '700', color: '#8A5E0C' },
+  field: { marginBottom: 16 },
+  label: { fontSize: 12, fontWeight: '700', color: COLORS.charcoalSoft, marginBottom: 6 },
+  input: { paddingVertical: 13, paddingHorizontal: 14, borderRadius: 11, borderWidth: 1.5, borderColor: COLORS.line, backgroundColor: COLORS.card, fontSize: 15, color: COLORS.charcoal },
+  inputError: { borderColor: COLORS.error },
+  errorText: { marginTop: 5, fontSize: 12, color: COLORS.error, fontWeight: '600' },
+  cta: { marginTop: 8, paddingVertical: 15, borderRadius: 12, backgroundColor: COLORS.ember, alignItems: 'center' },
+  ctaText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  divider: { flexDirection: 'row', alignItems: 'center', marginVertical: 22 },
+  dividerLine: { flex: 1, height: 1, backgroundColor: COLORS.line },
+  dividerText: { marginHorizontal: 10, color: COLORS.charcoalSoft, fontSize: 12 },
+  ghostBtn: { paddingVertical: 13, borderRadius: 12, borderWidth: 1.5, borderColor: COLORS.line, backgroundColor: COLORS.card, alignItems: 'center' },
+  ghostBtnText: { fontWeight: '700', fontSize: 14, color: COLORS.charcoal },
+  badge: { marginTop: 'auto', flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', backgroundColor: 'rgba(240,180,41,0.18)', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 999 },
+  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.wheat, marginRight: 8 },
+  badgeText: { fontSize: 12, fontWeight: '700', color: '#8A5E0C' },
 });
