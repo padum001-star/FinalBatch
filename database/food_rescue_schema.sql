@@ -1,9 +1,8 @@
 -- Enable UUID generation (run once per database)
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
--- ===== AUTH =====
--- Central auth table: stores credentials and role.
--- Password is never stored in plaintext — only the bcrypt hash.
+-- ===== USERS =====
+
 CREATE TABLE users (
     user_id       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     email         VARCHAR(255) UNIQUE NOT NULL,
@@ -12,7 +11,6 @@ CREATE TABLE users (
     created_at    TIMESTAMP DEFAULT now()
 );
 
--- ===== USERS =====
 CREATE TABLE vendors (
     vendor_id       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id         UUID REFERENCES users(user_id),
@@ -36,6 +34,8 @@ CREATE TABLE consumers (
     phone           VARCHAR(20),
     created_at      TIMESTAMP DEFAULT now()
 );
+
+
 
 -- ===== LOOKUP TABLES =====
 CREATE TABLE surplus_reasons (

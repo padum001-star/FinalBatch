@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,9 +10,16 @@ import {
   Platform,
   UIManager,
   LayoutAnimation,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
+import * as Google from 'expo-auth-session/providers/google';
+import * as WebBrowser from 'expo-web-browser';
+import * as AuthSession from 'expo-auth-session';
+
+// Tell the browser to close the auth popup when it redirects back
+WebBrowser.maybeCompleteAuthSession();
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -66,6 +73,44 @@ export default function AuthScreen({ route, navigation }) {
 
   function pressIn() { Animated.timing(ctaScale, { toValue: 0.97, duration: 100, useNativeDriver: true }).start(); }
   function pressOut() { Animated.timing(ctaScale, { toValue: 1, duration: 120, useNativeDriver: true }).start(); }
+
+  // ─── Google OAuth Setup ───────────────────────────────────────────
+  const redirectUri = AuthSession.makeRedirectUri({
+    native: 'finalbatch://',
+  });
+
+  const [googleRequest, googleResponse, googlePromptAsync] = Google.useAuthRequest({
+    clientId: '480406645284-jm0rufqpi1aj58561vh3njscg5mh872h.apps.googleusercontent.com',
+    redirectUri,
+  });
+
+  // When Google responds, grab the user's profile and navigate to Home
+  useEffect(() => {
+    if (googleResponse?.type === 'success') {
+      const { authentication } = googleResponse;
+      // Use the access token to fetch the user's Google profile
+      fetch('https://www.googleapis.com/userinfo/v2/me', {
+        headers: { Authorization: `Bearer ${authentication.accessToken}` },
+      })
+        .then((res) => res.json())
+        .then((userInfo) => {
+          // userInfo contains: { id, email, name, picture }
+          // Later you will send this to your Lambda backend to create/find the user
+          console.log('Google user:', userInfo);
+
+          // Navigate to Home (same stack reset as normal login)
+          navigation.reset({
+            index: 0,
+            routes: [{ name: 'Home' }],
+          });
+        })
+        .catch((err) => {
+          console.error('Failed to fetch Google profile:', err);
+          Alert.alert('Google Sign-In Error', 'Could not retrieve your Google account info. Please try again.');
+        });
+    }
+  }, [googleResponse]);
+  // ─────────────────────────────────────────────────────────────────
 
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -219,7 +264,11 @@ export default function AuthScreen({ route, navigation }) {
           <View style={styles.dividerLine} />
         </View>
 
-        <TouchableOpacity style={styles.ghostBtn}>
+        <TouchableOpacity
+          style={[styles.ghostBtn, !googleRequest && styles.ghostBtnDisabled]}
+          disabled={!googleRequest}
+          onPress={() => googlePromptAsync()}
+        >
           <Text style={styles.ghostBtnText}>Continue with Google</Text>
         </TouchableOpacity>
 
@@ -257,6 +306,7 @@ const styles = StyleSheet.create({
   dividerLine: { flex: 1, height: 1, backgroundColor: COLORS.line },
   dividerText: { marginHorizontal: 10, color: COLORS.charcoalSoft, fontSize: 12 },
   ghostBtn: { paddingVertical: 13, borderRadius: 12, borderWidth: 1.5, borderColor: COLORS.line, backgroundColor: COLORS.card, alignItems: 'center' },
+  ghostBtnDisabled: { opacity: 0.4 },
   ghostBtnText: { fontWeight: '700', fontSize: 14, color: COLORS.charcoal },
   badge: { marginTop: 'auto', flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', backgroundColor: 'rgba(240,180,41,0.18)', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 999 },
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.wheat, marginRight: 8 },
