@@ -1,7 +1,8 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
+  Image,
   TextInput,
   TouchableOpacity,
   StyleSheet,
@@ -13,44 +14,70 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { Redirect, router, useLocalSearchParams } from 'expo-router';
+import * as Crypto from 'expo-crypto';
+import { useSession } from '../src/state/Session';
+import { api, API_URL } from '../src/state/api';
+import * as WebBrowser from 'expo-web-browser';
+import * as AuthSession from 'expo-auth-session';
+
+// Tell the browser to close the auth popup when it redirects back
+WebBrowser.maybeCompleteAuthSession();
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
 const COLORS = {
-  fern:         '#1F4D3D',
-  ember:        '#E85A34',
-  sage:         '#F5F7F0',
-  card:         '#FFFFFF',
-  charcoal:     '#1C2620',
+  fern: '#1F4D3D',
+  ember: '#E85A34',
+  sage: '#F5F7F0',
+  card: '#FFFFFF',
+  charcoal: '#1C2620',
   charcoalSoft: '#5C6B62',
-  wheat:        '#F0B429',
-  line:         '#E1E7DC',
-  error:        '#D93025',
+  wheat: '#F0B429',
+  line: '#E1E7DC',
+  error: '#D93025',
 };
 
-export default function AuthScreen({ route, navigation }) {
+export default function AuthScreen() {
   // Read which tab to open from the onboarding screen
-  const initialMode = route?.params?.initialMode ?? 'signup';
+  const { initialMode: requestedMode } = useLocalSearchParams();
+  const initialMode = requestedMode === 'login' ? 'login' : 'signup';
+  const { signIn, user } = useSession();
+  const [busy, setBusy] = useState(false);
+  const [admin, setAdmin] = useState(false);
+  const [serverError, setServerError] = useState('');
+  const [googlePreparation, setGooglePreparation] = useState(null);
+  useEffect(() => {
+    let active = true;
+    const verifier = Array.from(Crypto.getRandomBytes(32), byte => byte.toString(16).padStart(2, '0')).join('');
+    Promise.all([Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, verifier), api('/auth/providers')])
+      .then(([challenge, providers]) => { if (active) setGooglePreparation({ verifier, challenge, enabled: providers.google }); })
+      .catch(() => { if (active) setGooglePreparation({ enabled: false }); });
+    return () => { active = false; };
+  }, []);
 
-  const [mode, setMode]         = useState(initialMode);
-  const pillX                   = useRef(new Animated.Value(initialMode === 'signup' ? 0 : 1)).current;
-  const ctaScale                = useRef(new Animated.Value(1)).current;
+  const [mode, setMode] = useState(initialMode);
+  const pillX = useRef(new Animated.Value(initialMode === 'signup' ? 0 : 1)).current;
+  const ctaScale = useRef(new Animated.Value(1)).current;
 
   // Form state
-  const [name, setName]         = useState('');
-  const [email, setEmail]       = useState('');
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [passwordVisible, setPasswordVisible] = useState(false);
 
   // Error state
-  const [errors, setErrors]     = useState({ name: '', email: '', password: '' });
+  const [errors, setErrors] = useState({ name: '', email: '', password: '' });
 
   function switchMode(next) {
     if (next === mode) return;
     setName('');
     setEmail('');
     setPassword('');
+    setPasswordVisible(false);
     setErrors({ name: '', email: '', password: '' });
     LayoutAnimation.configureNext(
       LayoutAnimation.create(250, LayoutAnimation.Types.easeInEaseOut, LayoutAnimation.Properties.opacity)
@@ -64,44 +91,98 @@ export default function AuthScreen({ route, navigation }) {
     setMode(next);
   }
 
-  function pressIn()  { Animated.timing(ctaScale, { toValue: 0.97, duration: 100,  useNativeDriver: true }).start(); }
-  function pressOut() { Animated.timing(ctaScale, { toValue: 1,    duration: 120,  useNativeDriver: true }).start(); }
+  function pressIn() { Animated.timing(ctaScale, { toValue: 0.97, duration: 100, useNativeDriver: true }).start(); }
+  function pressOut() { Animated.timing(ctaScale, { toValue: 1, duration: 120, useNativeDriver: true }).start(); }
+
+  async function handleGoogle() {
+    if (busy) return;
+    setBusy(true); setServerError('');
+    try {
+      if (!googlePreparation?.enabled) throw new Error('Google login needs server configuration. You can use email login meanwhile.');
+      const { verifier, challenge } = googlePreparation;
+      const redirectUri = AuthSession.makeRedirectUri({ scheme: 'finalbatch', path: 'auth' });
+      if (Platform.OS !== 'web' && /^exps?:/.test(redirectUri)) {
+        throw new Error('Google sign-in needs the FinalBatch development app. Please use email login in Expo Go.');
+      }
+      // Backend APP_AUTH_REDIRECT must match this URL. Native Google sign-in requires a development build.
+      const result = await WebBrowser.openAuthSessionAsync(`${API_URL}/auth/google?challenge=${challenge}`, redirectUri);
+      if (result.type !== 'success') return;
+      const url = new URL(result.url);
+      if (url.searchParams.get('error')) throw new Error('Google sign-in failed. If you already have an account, use your password.');
+      const code = url.searchParams.get('code');
+      if (!code) throw new Error('Google did not return a login code.');
+      await signIn(await api('/auth/exchange', { method: 'POST', body: { code, verifier } }));
+      router.replace('/(tabs)');
+    } catch (error) { setServerError(error.message); }
+    finally { setBusy(false); }
+  }
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  function getFieldError(field, val) {
+    if (field === 'name') {
+      if (mode === 'signup' && (!val || val.trim().length === 0)) {
+        return 'Please enter your name.';
+      }
+    } else if (field === 'email') {
+      const trimmed = (val ?? '').trim();
+      if (trimmed.length === 0) {
+        return 'Email is required.';
+      } else if (!emailRegex.test(trimmed)) {
+        return 'Please enter a valid email address (e.g. you@email.com).';
+      }
+    } else if (field === 'password') {
+      if (!val || val.length === 0) {
+        return 'Password is required.';
+      } else if (mode === 'signup' && val.length < 8) {
+        return 'Password must be at least 8 characters.';
+      }
+    }
+    return '';
+  }
+
+  function handleBlur(field) {
+    const val = field === 'name' ? name : field === 'email' ? email : password;
+    const errorMsg = getFieldError(field, val);
+    setErrors((prev) => ({ ...prev, [field]: errorMsg }));
+  }
+
+  function handleChange(field, text) {
+    if (field === 'name') setName(text);
+    if (field === 'email') setEmail(text);
+    if (field === 'password') setPassword(text);
+
+    // If there is currently an error displayed for this field, re-check as they type
+    // so the error disappears as soon as they fix the format
+    if (errors[field]) {
+      const currentError = getFieldError(field, text);
+      setErrors((prev) => ({ ...prev, [field]: currentError }));
+    }
+  }
 
   function validate() {
-    const newErrors = { name: '', email: '', password: '' };
-    let valid = true;
-
-    if (mode === 'signup' && name.trim().length === 0) {
-      newErrors.name = 'Please enter your name.';
-      valid = false;
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (email.trim().length === 0) {
-      newErrors.email = 'Email is required.';
-      valid = false;
-    } else if (!emailRegex.test(email.trim())) {
-      newErrors.email = 'Please enter a valid email address (e.g. you@email.com).';
-      valid = false;
-    }
-
-    if (password.length === 0) {
-      newErrors.password = 'Password is required.';
-      valid = false;
-    } else if (password.length < 6) {
-      newErrors.password = 'Password must be at least 6 characters.';
-      valid = false;
-    }
+    const newErrors = {
+      name: mode === 'signup' ? getFieldError('name', name) : '',
+      email: getFieldError('email', email),
+      password: getFieldError('password', password),
+    };
 
     setErrors(newErrors);
-    return valid;
+    const hasErrors = Object.values(newErrors).some((err) => err.length > 0);
+    return !hasErrors;
   }
 
-  function handleSubmit() {
-    if (!validate()) return;
-    // Navigates to Home screen
-    navigation.replace('Home');
+  async function handleSubmit() {
+    if (busy || !validate()) return;
+    setBusy(true); setServerError('');
+    try {
+      const path = mode === 'signup' ? '/auth/signup' : admin ? '/auth/admin/login' : '/auth/login';
+      await signIn(await api(path, { method: 'POST', body: { name, email, password } }));
+      router.replace('/(tabs)');
+    } catch (error) { setServerError(error.message); }
+    finally { setBusy(false); }
   }
+  if (user) return <Redirect href="/(tabs)" />;
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -141,10 +222,8 @@ export default function AuthScreen({ route, navigation }) {
               placeholder="Your name"
               placeholderTextColor={COLORS.charcoalSoft}
               value={name}
-              onChangeText={(text) => {
-                setName(text);
-                if (errors.name) setErrors((e) => ({ ...e, name: '' }));
-              }}
+              onChangeText={(text) => handleChange('name', text)}
+              onBlur={() => handleBlur('name')}
             />
             {errors.name ? <Text style={styles.errorText}>{errors.name}</Text> : null}
           </View>
@@ -159,44 +238,63 @@ export default function AuthScreen({ route, navigation }) {
             keyboardType="email-address"
             autoCapitalize="none"
             value={email}
-            onChangeText={(text) => {
-              setEmail(text);
-              if (errors.email) setErrors((e) => ({ ...e, email: '' }));
-            }}
+            onChangeText={(text) => handleChange('email', text)}
+            onBlur={() => handleBlur('email')}
           />
           {errors.email ? <Text style={styles.errorText}>{errors.email}</Text> : null}
         </View>
 
         <View style={styles.field}>
           <Text style={styles.label}>Password</Text>
-          <TextInput
-            style={[styles.input, errors.password ? styles.inputError : null]}
-            placeholder="••••••••"
-            placeholderTextColor={COLORS.charcoalSoft}
-            secureTextEntry
-            value={password}
-            onChangeText={(text) => {
-              setPassword(text);
-              if (errors.password) setErrors((e) => ({ ...e, password: '' }));
-            }}
-          />
+          <View style={styles.passwordField}>
+            <TextInput
+              style={[styles.input, styles.passwordInput, errors.password ? styles.inputError : null]}
+              accessibilityLabel="Password"
+              placeholder="••••••••"
+              placeholderTextColor={COLORS.charcoalSoft}
+              secureTextEntry={!passwordVisible}
+              autoCapitalize="none"
+              autoCorrect={false}
+              value={password}
+              onChangeText={(text) => handleChange('password', text)}
+              onBlur={() => handleBlur('password')}
+            />
+            <TouchableOpacity
+              style={styles.passwordToggle}
+              accessibilityRole="button"
+              accessibilityLabel={passwordVisible ? 'Hide password' : 'Show password'}
+              accessibilityState={{ selected: passwordVisible }}
+              onPress={() => setPasswordVisible(visible => !visible)}
+            >
+              <Ionicons name={passwordVisible ? 'eye-off-outline' : 'eye-outline'} size={22} color={COLORS.charcoalSoft} />
+            </TouchableOpacity>
+          </View>
           {errors.password ? <Text style={styles.errorText}>{errors.password}</Text> : null}
         </View>
 
-        <TouchableOpacity activeOpacity={1} onPressIn={pressIn} onPressOut={pressOut} onPress={handleSubmit}>
+        <TouchableOpacity disabled={busy} activeOpacity={1} onPressIn={pressIn} onPressOut={pressOut} onPress={handleSubmit}>
           <Animated.View style={[styles.cta, { transform: [{ scale: ctaScale }] }]}>
-            <Text style={styles.ctaText}>{mode === 'signup' ? 'Create account' : 'Log in'}</Text>
+            <Text style={styles.ctaText}>{busy ? 'Please wait…' : mode === 'signup' ? 'Create account' : admin ? 'Admin log in' : 'Log in'}</Text>
           </Animated.View>
         </TouchableOpacity>
 
+        {serverError ? <Text accessibilityRole="alert" style={styles.errorText}>{serverError}</Text> : null}
+        {mode === 'login' && <TouchableOpacity disabled={busy} onPress={() => setAdmin(!admin)}><Text style={[styles.label, { marginTop: 14 }]}>{admin ? 'Switch to user login' : 'Administrator login'}</Text></TouchableOpacity>}
         <View style={styles.divider}>
           <View style={styles.dividerLine} />
           <Text style={styles.dividerText}>or</Text>
           <View style={styles.dividerLine} />
         </View>
 
-        <TouchableOpacity style={styles.ghostBtn}>
-          <Text style={styles.ghostBtnText}>Continue with Apple</Text>
+        <TouchableOpacity
+          style={[styles.ghostBtn, (busy || !googlePreparation) && styles.ghostBtnDisabled]}
+          disabled={busy || !googlePreparation}
+          onPress={handleGoogle}
+          accessibilityRole="button"
+          accessibilityLabel="Continue with Google"
+        >
+          <Image source={require('../assets/google-signin-icon.png')} style={styles.googleIcon} accessibilityElementsHidden importantForAccessibility="no" />
+          <Text style={styles.ghostBtnText}>Continue with Google</Text>
         </TouchableOpacity>
 
         <View style={styles.badge}>
@@ -209,32 +307,37 @@ export default function AuthScreen({ route, navigation }) {
 }
 
 const styles = StyleSheet.create({
-  screen:        { flex: 1, backgroundColor: '#E9EDE3', alignItems: 'center', justifyContent: 'center' },
-  card:          { width: '100%', maxWidth: 375, flex: 1, backgroundColor: COLORS.sage, padding: 24, paddingTop: 40 },
-  brand:         { fontWeight: '800', fontSize: 19, color: COLORS.fern, marginBottom: 6 },
-  sub:           { color: COLORS.charcoalSoft, fontSize: 14, marginBottom: 24, lineHeight: 20 },
-  tabs:          { flexDirection: 'row', backgroundColor: COLORS.line, borderRadius: 12, padding: 4, marginBottom: 28, position: 'relative' },
+  screen: { flex: 1, backgroundColor: '#E9EDE3', alignItems: 'center', justifyContent: 'center' },
+  card: { width: '100%', maxWidth: 375, flex: 1, backgroundColor: COLORS.sage, padding: 24, paddingTop: 40 },
+  brand: { fontWeight: '800', fontSize: 19, color: COLORS.fern, marginBottom: 6 },
+  sub: { color: COLORS.charcoalSoft, fontSize: 14, marginBottom: 24, lineHeight: 20 },
+  tabs: { flexDirection: 'row', backgroundColor: COLORS.line, borderRadius: 12, padding: 4, marginBottom: 28, position: 'relative' },
   tabBg: {
     position: 'absolute', top: 4, bottom: 4, left: 4, width: 160,
     backgroundColor: COLORS.card, borderRadius: 9, elevation: 2,
     shadowColor: '#142820', shadowOpacity: 0.12, shadowRadius: 3, shadowOffset: { width: 0, height: 1 },
   },
-  tab:           { flex: 1, alignItems: 'center', paddingVertical: 10, zIndex: 1 },
-  tabText:       { fontSize: 14, fontWeight: '700', color: COLORS.charcoalSoft },
+  tab: { flex: 1, alignItems: 'center', paddingVertical: 10, zIndex: 1 },
+  tabText: { fontSize: 14, fontWeight: '700', color: COLORS.charcoalSoft },
   tabTextActive: { color: COLORS.fern },
-  field:         { marginBottom: 16 },
-  label:         { fontSize: 12, fontWeight: '700', color: COLORS.charcoalSoft, marginBottom: 6 },
-  input:         { paddingVertical: 13, paddingHorizontal: 14, borderRadius: 11, borderWidth: 1.5, borderColor: COLORS.line, backgroundColor: COLORS.card, fontSize: 15, color: COLORS.charcoal },
-  inputError:    { borderColor: COLORS.error },
-  errorText:     { marginTop: 5, fontSize: 12, color: COLORS.error, fontWeight: '600' },
-  cta:           { marginTop: 8, paddingVertical: 15, borderRadius: 12, backgroundColor: COLORS.ember, alignItems: 'center' },
-  ctaText:       { color: '#fff', fontSize: 15, fontWeight: '700' },
-  divider:       { flexDirection: 'row', alignItems: 'center', marginVertical: 22 },
-  dividerLine:   { flex: 1, height: 1, backgroundColor: COLORS.line },
-  dividerText:   { marginHorizontal: 10, color: COLORS.charcoalSoft, fontSize: 12 },
-  ghostBtn:      { paddingVertical: 13, borderRadius: 12, borderWidth: 1.5, borderColor: COLORS.line, backgroundColor: COLORS.card, alignItems: 'center' },
-  ghostBtnText:  { fontWeight: '700', fontSize: 14, color: COLORS.charcoal },
-  badge:         { marginTop: 'auto', flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', backgroundColor: 'rgba(240,180,41,0.18)', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 999 },
-  dot:           { width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.wheat, marginRight: 8 },
-  badgeText:     { fontSize: 12, fontWeight: '700', color: '#8A5E0C' },
+  field: { marginBottom: 16 },
+  label: { fontSize: 12, fontWeight: '700', color: COLORS.charcoalSoft, marginBottom: 6 },
+  input: { paddingVertical: 13, paddingHorizontal: 14, borderRadius: 11, borderWidth: 1.5, borderColor: COLORS.line, backgroundColor: COLORS.card, fontSize: 15, color: COLORS.charcoal },
+  inputError: { borderColor: COLORS.error },
+  passwordField: { position: 'relative' },
+  passwordInput: { paddingRight: 56 },
+  passwordToggle: { position: 'absolute', right: 3, top: 0, bottom: 0, width: 48, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  errorText: { marginTop: 5, fontSize: 12, color: COLORS.error, fontWeight: '600' },
+  cta: { marginTop: 8, paddingVertical: 15, borderRadius: 12, backgroundColor: COLORS.ember, alignItems: 'center' },
+  ctaText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  divider: { flexDirection: 'row', alignItems: 'center', marginVertical: 22 },
+  dividerLine: { flex: 1, height: 1, backgroundColor: COLORS.line },
+  dividerText: { marginHorizontal: 10, color: COLORS.charcoalSoft, fontSize: 12 },
+  ghostBtn: { flexDirection: 'row', justifyContent: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 13, borderRadius: 12, borderWidth: 1, borderColor: '#747775', backgroundColor: COLORS.card, alignItems: 'center' },
+  googleIcon: { width: 20, height: 20, resizeMode: 'contain' },
+  ghostBtnDisabled: { opacity: 0.4 },
+  ghostBtnText: { fontWeight: '700', fontSize: 14, color: COLORS.charcoal },
+  badge: { marginTop: 'auto', flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', backgroundColor: 'rgba(240,180,41,0.18)', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 999 },
+  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.wheat, marginRight: 8 },
+  badgeText: { fontSize: 12, fontWeight: '700', color: '#8A5E0C' },
 });

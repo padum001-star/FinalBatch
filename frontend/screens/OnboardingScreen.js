@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import React, { useEffect, useRef } from 'react';
 import {
   View,
@@ -63,7 +64,7 @@ function animStyle(anim, offset = 28) {
   };
 }
 
-export default function OnboardingScreen({ navigation }) {
+export default function OnboardingScreen() {
   // 7 elements to stagger: badge, headline, sub, 3 pills, cta block
   const [badge, headline, sub, pill1, pill2, pill3, cta] = useStaggeredAnims(7);
   const ctaScale = useRef(new Animated.Value(1)).current;
@@ -121,7 +122,7 @@ export default function OnboardingScreen({ navigation }) {
           activeOpacity={1}
           onPressIn={pressIn}
           onPressOut={pressOut}
-          onPress={() => navigation.navigate('Auth', { initialMode: 'signup' })}
+          onPress={() => router.push({ pathname: '/auth', params: { initialMode: 'signup' } })}
         >
           <Animated.View style={[styles.ctaBtn, { transform: [{ scale: ctaScale }] }]}>
             <Text style={styles.ctaBtnText}>Get started</Text>
@@ -130,7 +131,7 @@ export default function OnboardingScreen({ navigation }) {
 
         <TouchableOpacity
           style={styles.signInLink}
-          onPress={() => navigation.navigate('Auth', { initialMode: 'login' })}
+          onPress={() => router.push({ pathname: '/auth', params: { initialMode: 'login' } })}
         >
           <Text style={styles.signInText}>I already have an account</Text>
         </TouchableOpacity>

@@ -3,6 +3,7 @@
     "name": "finalbatch-1",
     "slug": "finalbatch-1",
     "version": "1.0.0",
+    "scheme": "finalbatch",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -18,7 +19,13 @@
       }
     },
     "web": {
-      "favicon": "./assets/favicon.png"
-    }
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-web-browser",
+      "expo-secure-store"
+    ]
   }
 }
