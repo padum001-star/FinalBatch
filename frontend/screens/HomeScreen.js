@@ -1,3 +1,4 @@
+import { useSession } from '../src/state/Session';
 import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
@@ -8,6 +9,7 @@ import {
   Animated,
   TextInput,
   Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -15,147 +17,81 @@ import { StatusBar } from 'expo-status-bar';
 const { width } = Dimensions.get('window');
 
 const COLORS = {
-  fern: '#1F4D3D',
-  ember: '#E85A34',
-  sage: '#F5F7F0',
-  card: '#FFFFFF',
-  charcoal: '#1C2620',
+  fern:         '#1F4D3D',
+  ember:        '#E85A34',
+  sage:         '#F5F7F0',
+  card:         '#FFFFFF',
+  charcoal:     '#1C2620',
   charcoalSoft: '#5C6B62',
-  wheat: '#F0B429',
-  line: '#E1E7DC',
+  wheat:        '#F0B429',
+  line:         '#E1E7DC',
 };
 
 const CATEGORIES = ['All', 'Bakery', 'Café', 'Restaurant', 'Produce', 'Meals'];
 
-// Mock listings — will be replaced with real data from GET /listings Lambda
-const MOCK_LISTINGS = [
-  {
-    id: '1',
-    itemName: 'Sourdough Loaf',
-    vendorName: 'Bread & Butter Bakery',
-    price: 3.50,
-    originalPrice: 9.00,
-    pickupStart: '5:00 PM',
-    pickupEnd: '7:00 PM',
-    emoji: '🍞',
-    accentColor: '#F0B429',
-    tag: 'Bakery',
-    quantity: 4,
-    distance: '0.3 mi',
-  },
-  {
-    id: '2',
-    itemName: 'Pastry Box — 6 items',
-    vendorName: 'Morning Glory Café',
-    price: 5.00,
-    originalPrice: 14.00,
-    pickupStart: '4:30 PM',
-    pickupEnd: '6:00 PM',
-    emoji: '🥐',
-    accentColor: '#E85A34',
-    tag: 'Café',
-    quantity: 2,
-    distance: '0.7 mi',
-  },
-  {
-    id: '3',
-    itemName: 'Mixed Veg Bundle',
-    vendorName: 'Green Earth Market',
-    price: 4.00,
-    originalPrice: 12.00,
-    pickupStart: '3:00 PM',
-    pickupEnd: '6:30 PM',
-    emoji: '🥦',
-    accentColor: '#1F4D3D',
-    tag: 'Produce',
-    quantity: 8,
-    distance: '1.1 mi',
-  },
-  {
-    id: '4',
-    itemName: 'Pasta & Sauce Kit',
-    vendorName: "Nonna's Kitchen",
-    price: 6.00,
-    originalPrice: 16.00,
-    pickupStart: '6:00 PM',
-    pickupEnd: '8:00 PM',
-    emoji: '🍝',
-    accentColor: '#C0392B',
-    tag: 'Meals',
-    quantity: 3,
-    distance: '0.9 mi',
-  },
-];
-
-function ListingCard({ item, index }) {
-  const anim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.spring(anim, {
-      toValue: 1,
-      damping: 20,
-      stiffness: 140,
-      delay: index * 70,
-      useNativeDriver: true,
-    }).start();
-  }, []);
-
+// ─── Horizontal Listing Card (Airbnb-style) ───────────────────────────────────
+function HCard({ item, isFavourited, onToggleFavourite }) {
   const scale = useRef(new Animated.Value(1)).current;
-  function pressIn() { Animated.spring(scale, { toValue: 0.97, useNativeDriver: true }).start(); }
-  function pressOut() { Animated.spring(scale, { toValue: 1, useNativeDriver: true }).start(); }
-
   const discount = Math.round((1 - item.price / item.originalPrice) * 100);
 
-  return (
-    <Animated.View
-      style={{
-        opacity: anim,
-        transform: [
-          { translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) },
-          { scale },
-        ],
-      }}
-    >
-      <TouchableOpacity activeOpacity={1} onPressIn={pressIn} onPressOut={pressOut}>
-        <View style={styles.card}>
-          {/* Left accent strip */}
-          <View style={[styles.cardAccent, { backgroundColor: item.accentColor }]} />
+  function pressIn() {
+    Animated.spring(scale, { toValue: 0.96, useNativeDriver: true, damping: 20 }).start();
+  }
+  function pressOut() {
+    Animated.spring(scale, { toValue: 1, useNativeDriver: true, damping: 20 }).start();
+  }
 
-          {/* Emoji */}
-          <View style={styles.cardEmoji}>
-            <Text style={styles.cardEmojiText}>{item.emoji}</Text>
+  return (
+    <Animated.View style={{ transform: [{ scale }] }}>
+      <TouchableOpacity
+        activeOpacity={1}
+        onPressIn={pressIn}
+        onPressOut={pressOut}
+        style={styles.hCard}
+      >
+        {/* Top: emoji area */}
+        <View style={[styles.hCardTop, { backgroundColor: item.accentColor + '26' }]}>
+          <Text style={styles.hCardEmoji}>{item.emoji}</Text>
+
+          {/* Discount badge – top left */}
+          <View style={styles.hDiscountBadge}>
+            <Text style={styles.hDiscountText}>-{discount}%</Text>
           </View>
 
-          {/* Content */}
-          <View style={styles.cardContent}>
-            <View style={styles.cardTopRow}>
-              <Text style={styles.cardName} numberOfLines={1}>{item.itemName}</Text>
-              <View style={styles.discountBadge}>
-                <Text style={styles.discountText}>-{discount}%</Text>
-              </View>
-            </View>
-            <Text style={styles.cardVendor} numberOfLines={1}>{item.vendorName}</Text>
+          {/* Heart button – top right */}
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel={`${isFavourited ? 'Remove' : 'Save'} ${item.vendorName} ${isFavourited ? 'from' : 'to'} favourites`}
+            accessibilityState={{ selected: isFavourited }}
+            style={styles.heartBtn}
+            onPress={() => onToggleFavourite(item.id)}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text style={[styles.heartIcon, isFavourited && styles.heartIconActive]}>
+              {isFavourited ? '♥' : '♡'}
+            </Text>
+          </TouchableOpacity>
+        </View>
 
-            <View style={styles.cardBottomRow}>
-              {/* Price */}
-              <View style={styles.priceRow}>
-                <Text style={styles.price}>${item.price.toFixed(2)}</Text>
-                <Text style={styles.originalPrice}>${item.originalPrice.toFixed(2)}</Text>
-              </View>
+        {/* Bottom: details */}
+        <View style={styles.hCardBottom}>
+          <Text style={styles.hCardName} numberOfLines={1}>{item.itemName}</Text>
+          <Text style={styles.hCardVendor} numberOfLines={1}>{item.vendorName}</Text>
 
-              {/* Pickup window */}
-              <View style={styles.pickupBadge}>
-                <Text style={styles.pickupText}>
-                  {item.pickupStart}–{item.pickupEnd}
-                </Text>
-              </View>
-            </View>
+          <View style={styles.hPriceRow}>
+            <Text style={styles.hPrice}>${item.price.toFixed(2)}</Text>
+            <Text style={styles.hOriginalPrice}>${item.originalPrice.toFixed(2)}</Text>
+          </View>
 
-            <View style={styles.cardMeta}>
-              <Text style={styles.metaText}>📦 {item.quantity} left</Text>
-              <Text style={styles.metaDot}>·</Text>
-              <Text style={styles.metaText}>📍 {item.distance}</Text>
+          <View style={styles.hMetaRow}>
+            <View style={styles.hPickupBadge}>
+              <Text style={styles.hPickupText}>⏱ {item.pickupStart}–{item.pickupEnd}</Text>
             </View>
+          </View>
+
+          <View style={styles.hDistanceRow}>
+            <Text style={styles.hDistanceText}>📍 {item.distance}</Text>
+            <Text style={styles.hQtyText}>📦 {item.quantity} left</Text>
           </View>
         </View>
       </TouchableOpacity>
@@ -163,13 +99,56 @@ function ListingCard({ item, index }) {
   );
 }
 
+// ─── Section with horizontal scroll ──────────────────────────────────────────
+function Section({ title, items, favourites, onToggleFavourite }) {
+  const [expanded, setExpanded] = useState(false);
+  if (items.length === 0) return null;
+  return (
+    <View style={styles.section}>
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>{title}</Text>
+        <TouchableOpacity onPress={() => setExpanded(!expanded)}>
+          <Text style={styles.seeAll}>{expanded ? 'Show less' : 'See all →'}</Text>
+        </TouchableOpacity>
+      </View>
+      <ScrollView
+        horizontal={!expanded}
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.hScroll}
+      >
+        {items.map((item) => (
+          <HCard
+            key={item.id}
+            item={item}
+            isFavourited={favourites.has(item.id)}
+            onToggleFavourite={onToggleFavourite}
+          />
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
+
+// ─── HomeScreen ───────────────────────────────────────────────────────────────
 export default function HomeScreen() {
+  const { user, favourites, toggleFavourite: onToggleFavourite, listings, loadError, loadingListings, retry } = useSession();
+  const [search, setSearch] = useState('');
+  const CLOSEST = [...listings].sort((a, b) => parseFloat(a.distance) - parseFloat(b.distance));
+  const POPULAR = listings.filter(item => item.id.startsWith('p'));
+  const NEWEST = listings.filter(item => item.id.startsWith('n'));
   const [activeCategory, setActiveCategory] = useState('All');
 
-  const filtered =
-    activeCategory === 'All'
-      ? MOCK_LISTINGS
-      : MOCK_LISTINGS.filter((l) => l.tag === activeCategory);
+  function filterSection(arr) {
+    return arr.filter(l => (activeCategory === 'All' || l.tag === activeCategory) && `${l.itemName} ${l.vendorName}`.toLowerCase().includes(search.trim().toLowerCase()));
+  }
+
+  const closestFiltered  = filterSection(CLOSEST);
+  const popularFiltered  = filterSection(POPULAR);
+  const newestFiltered   = filterSection(NEWEST);
+  const noResults =
+    closestFiltered.length === 0 &&
+    popularFiltered.length === 0 &&
+    newestFiltered.length === 0;
 
   // Header animation
   const headerAnim = useRef(new Animated.Value(0)).current;
@@ -188,39 +167,43 @@ export default function HomeScreen() {
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
 
-        {/* Header */}
+        {/* ── Header ── */}
         <Animated.View
           style={[
             styles.header,
             {
               opacity: headerAnim,
-              transform: [{ translateY: headerAnim.interpolate({ inputRange: [0, 1], outputRange: [-12, 0] }) }],
+              transform: [
+                { translateY: headerAnim.interpolate({ inputRange: [0, 1], outputRange: [-12, 0] }) },
+              ],
             },
           ]}
         >
           <View>
-            <Text style={styles.greeting}>Good morning 👋</Text>
+            <Text style={styles.greeting}>Hello, {user?.name?.split(' ')[0] || 'there'} 👋</Text>
             <View style={styles.locationRow}>
               <Text style={styles.locationPin}>📍</Text>
               <Text style={styles.locationText}>Plattsburgh, NY</Text>
             </View>
           </View>
           <View style={styles.avatar}>
-            <Text style={styles.avatarText}>P</Text>
+            <Text style={styles.avatarText}>{user?.name?.[0]?.toUpperCase() || '?'}</Text>
           </View>
         </Animated.View>
 
-        {/* Search bar */}
+        {/* ── Search bar ── */}
         <View style={styles.searchBar}>
           <Text style={styles.searchIcon}>🔍</Text>
           <TextInput
+            value={search}
+            onChangeText={setSearch}
             style={styles.searchInput}
             placeholder="Search for food near you..."
             placeholderTextColor={COLORS.charcoalSoft}
           />
         </View>
 
-        {/* Category filters */}
+        {/* ── Category filters ── */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -240,30 +223,43 @@ export default function HomeScreen() {
           })}
         </ScrollView>
 
-        {/* Section heading */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Available near you</Text>
-          <Text style={styles.sectionCount}>{filtered.length} listings</Text>
-        </View>
+        <Text style={{ paddingHorizontal: 22, color: COLORS.charcoalSoft, marginBottom: 16 }}>Demo listings · distances and popularity are sample data</Text>
+        {loadError ? <TouchableOpacity onPress={retry}><Text accessibilityRole="alert" style={{ padding: 22, color: COLORS.ember }}>{loadError} Tap to retry.</Text></TouchableOpacity> : null}
+        {favourites.size > 0 && <Section title="Your favourite places" items={filterSection(listings.filter(item => favourites.has(item.id)))} favourites={favourites} onToggleFavourite={onToggleFavourite} />}
+        {/* ── Sections ── */}
+        {loadingListings ? <ActivityIndicator color={COLORS.fern} /> : noResults ? (
+          <View style={styles.empty}>
+            <Text style={styles.emptyEmoji}>🍽️</Text>
+            <Text style={styles.emptyText}>No listings in this category right now.</Text>
+          </View>
+        ) : (
+          <>
+            <Section
+              title="Closest to you"
+              items={closestFiltered}
+              favourites={favourites}
+              onToggleFavourite={onToggleFavourite}
+            />
+            <Section
+              title="Popular in your area"
+              items={popularFiltered}
+              favourites={favourites}
+              onToggleFavourite={onToggleFavourite}
+            />
+            <Section
+              title="Newest listings"
+              items={newestFiltered}
+              favourites={favourites}
+              onToggleFavourite={onToggleFavourite}
+            />
+          </>
+        )}
 
-        {/* Listing cards */}
-        <View style={styles.listingsContainer}>
-          {filtered.map((item, i) => (
-            <ListingCard key={item.id} item={item} index={i} />
-          ))}
-          {filtered.length === 0 && (
-            <View style={styles.empty}>
-              <Text style={styles.emptyEmoji}>🍽️</Text>
-              <Text style={styles.emptyText}>No listings in this category right now.</Text>
-            </View>
-          )}
-        </View>
-
-        {/* Sustainability banner */}
+        {/* ── Sustainability banner ── */}
         <View style={styles.banner}>
           <View style={styles.bannerDot} />
           <Text style={styles.bannerText}>
-            Vendors near you saved <Text style={styles.bannerBold}>340 lbs</Text> of food this week
+            Vendors near you saved <Text style={styles.bannerBold}>340 lbs</Text> of food this week 🌱
           </Text>
         </View>
 
@@ -272,9 +268,10 @@ export default function HomeScreen() {
   );
 }
 
+// ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: COLORS.sage },
-  scroll: { paddingBottom: 40 },
+  scroll: { paddingBottom: 100 },
 
   // Header
   header: {
@@ -324,72 +321,99 @@ const styles = StyleSheet.create({
   catText: { fontSize: 13, fontWeight: '700', color: COLORS.charcoalSoft },
   catTextActive: { color: COLORS.sage },
 
-  // Section header
+  // Section
+  section: { marginBottom: 8 },
   sectionHeader: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingHorizontal: 22, marginBottom: 14,
   },
-  sectionTitle: { fontSize: 17, fontWeight: '800', color: COLORS.charcoal, letterSpacing: -0.3 },
-  sectionCount: { fontSize: 13, color: COLORS.charcoalSoft, fontWeight: '600' },
+  sectionTitle: { fontSize: 18, fontWeight: '800', color: COLORS.charcoal, letterSpacing: -0.3 },
+  seeAll: { fontSize: 13, fontWeight: '700', color: COLORS.fern },
 
-  // Listing cards
-  listingsContainer: { paddingHorizontal: 22, gap: 12 },
-  card: {
+  // Horizontal scroll
+  hScroll: { paddingHorizontal: 22, gap: 14, paddingBottom: 8 },
+
+  // Horizontal card
+  hCard: {
+    width: 200,
     backgroundColor: COLORS.card,
-    borderRadius: 16,
-    flexDirection: 'row',
+    borderRadius: 18,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: COLORS.line,
     shadowColor: COLORS.charcoal,
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 2,
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
   },
-  cardAccent: { width: 4 },
-  cardEmoji: {
-    width: 56, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: '#FAFAFA',
+  hCardTop: {
+    height: 110,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
   },
-  cardEmojiText: { fontSize: 24 },
-  cardContent: { flex: 1, padding: 13 },
-  cardTopRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 2 },
-  cardName: { flex: 1, fontSize: 15, fontWeight: '800', color: COLORS.charcoal, letterSpacing: -0.2 },
-  discountBadge: {
-    backgroundColor: 'rgba(31,77,61,0.1)',
-    paddingHorizontal: 7, paddingVertical: 3,
-    borderRadius: 6, marginLeft: 6,
-  },
-  discountText: { fontSize: 11, fontWeight: '800', color: COLORS.fern },
-  cardVendor: { fontSize: 12, color: COLORS.charcoalSoft, fontWeight: '500', marginBottom: 10 },
-  cardBottomRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  priceRow: { flexDirection: 'row', alignItems: 'baseline', gap: 5 },
-  price: { fontSize: 17, fontWeight: '800', color: COLORS.charcoal },
-  originalPrice: { fontSize: 13, color: COLORS.charcoalSoft, textDecorationLine: 'line-through' },
-  pickupBadge: {
-    backgroundColor: 'rgba(240,180,41,0.15)',
-    paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8,
-  },
-  pickupText: { fontSize: 11, fontWeight: '700', color: '#8A5E0C' },
-  cardMeta: { flexDirection: 'row', alignItems: 'center', marginTop: 8, gap: 4 },
-  metaText: { fontSize: 11, color: COLORS.charcoalSoft, fontWeight: '600' },
-  metaDot: { fontSize: 11, color: COLORS.charcoalSoft },
+  hCardEmoji: { fontSize: 44 },
 
-  // Empty state
-  empty: { alignItems: 'center', paddingVertical: 40 },
-  emptyEmoji: { fontSize: 40, marginBottom: 10 },
-  emptyText: { fontSize: 14, color: COLORS.charcoalSoft, fontWeight: '600' },
+  // Discount badge
+  hDiscountBadge: {
+    position: 'absolute',
+    top: 10, left: 10,
+    backgroundColor: COLORS.fern,
+    paddingHorizontal: 7, paddingVertical: 3,
+    borderRadius: 8,
+  },
+  hDiscountText: { fontSize: 11, fontWeight: '800', color: '#FFFFFF' },
+
+  // Heart
+  heartBtn: {
+    position: 'absolute',
+    top: 8, right: 10,
+    width: 30, height: 30,
+    borderRadius: 15,
+    backgroundColor: 'rgba(255,255,255,0.85)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heartIcon: { fontSize: 17, color: COLORS.charcoalSoft },
+  heartIconActive: { color: COLORS.ember },
+
+  // Card bottom
+  hCardBottom: { padding: 12, gap: 5 },
+  hCardName: { fontSize: 14, fontWeight: '800', color: COLORS.charcoal, letterSpacing: -0.2 },
+  hCardVendor: { fontSize: 11, color: COLORS.charcoalSoft, fontWeight: '500' },
+  hPriceRow: { flexDirection: 'row', alignItems: 'baseline', gap: 5, marginTop: 2 },
+  hPrice: { fontSize: 16, fontWeight: '800', color: COLORS.charcoal },
+  hOriginalPrice: { fontSize: 12, color: COLORS.charcoalSoft, textDecorationLine: 'line-through' },
+  hMetaRow: { marginTop: 2 },
+  hPickupBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(240,180,41,0.15)',
+    paddingHorizontal: 7, paddingVertical: 3, borderRadius: 7,
+  },
+  hPickupText: { fontSize: 10, fontWeight: '700', color: '#8A5E0C' },
+  hDistanceRow: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4,
+  },
+  hDistanceText: { fontSize: 10, color: COLORS.charcoalSoft, fontWeight: '600' },
+  hQtyText: { fontSize: 10, color: COLORS.charcoalSoft, fontWeight: '600' },
+
+  // Empty
+  empty: { alignItems: 'center', paddingVertical: 60 },
+  emptyEmoji: { fontSize: 48, marginBottom: 12 },
+  emptyText: { fontSize: 15, color: COLORS.charcoalSoft, fontWeight: '600' },
 
   // Banner
   banner: {
     flexDirection: 'row', alignItems: 'center',
-    marginHorizontal: 22, marginTop: 24,
+    marginHorizontal: 22, marginTop: 20,
     backgroundColor: 'rgba(240,180,41,0.15)',
-    paddingVertical: 12, paddingHorizontal: 16,
-    borderRadius: 12,
+    paddingVertical: 14, paddingHorizontal: 16,
+    borderRadius: 14,
   },
   bannerDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: COLORS.wheat, marginRight: 10 },
-  bannerText: { fontSize: 13, color: '#7A520A', lineHeight: 18 },
+  bannerText: { flex: 1, fontSize: 13, color: '#7A520A', lineHeight: 19 },
   bannerBold: { fontWeight: '800' },
 });
+
+// Export all listings so other screens can consume them

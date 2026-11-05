@@ -1,30 +1,9 @@
-import { NavigationContainer } from '@react-navigation/native';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
-
-import OnboardingScreen from './screens/OnboardingScreen';
-import AuthScreen from './screens/AuthScreen';
-import HomeScreen from './screens/HomeScreen';
-
-const Stack = createNativeStackNavigator();
+import React from 'react';
+import { ExpoRoot } from 'expo-router';
 
 export default function App() {
-  return (
-    <SafeAreaProvider>
-      <NavigationContainer>
-        <Stack.Navigator
-          initialRouteName="Onboarding"
-          screenOptions={{ headerShown: false }}
-        >
-          <Stack.Screen name="Onboarding" component={OnboardingScreen} />
-          <Stack.Screen name="Auth" component={AuthScreen} />
-          <Stack.Screen
-            name="Home"
-            component={HomeScreen}
-            options={{ gestureEnabled: false }}
-          />
-        </Stack.Navigator>
-      </NavigationContainer>
-    </SafeAreaProvider>
-  );
+  // A literal path keeps route discovery independent of the entry module's
+  // EXPO_ROUTER_APP_ROOT transform. Keep this inside App for Fast Refresh.
+  const context = require.context('./src/app');
+  return <ExpoRoot context={context} />;
 }

@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
+  Image,
   TextInput,
   TouchableOpacity,
   StyleSheet,
@@ -10,11 +11,14 @@ import {
   Platform,
   UIManager,
   LayoutAnimation,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import * as Google from 'expo-auth-session/providers/google';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { Redirect, router, useLocalSearchParams } from 'expo-router';
+import * as Crypto from 'expo-crypto';
+import { useSession } from '../src/state/Session';
+import { api, API_URL } from '../src/state/api';
 import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
 
@@ -37,9 +41,23 @@ const COLORS = {
   error: '#D93025',
 };
 
-export default function AuthScreen({ route, navigation }) {
+export default function AuthScreen() {
   // Read which tab to open from the onboarding screen
-  const initialMode = route?.params?.initialMode ?? 'signup';
+  const { initialMode: requestedMode } = useLocalSearchParams();
+  const initialMode = requestedMode === 'login' ? 'login' : 'signup';
+  const { signIn, user } = useSession();
+  const [busy, setBusy] = useState(false);
+  const [admin, setAdmin] = useState(false);
+  const [serverError, setServerError] = useState('');
+  const [googlePreparation, setGooglePreparation] = useState(null);
+  useEffect(() => {
+    let active = true;
+    const verifier = Array.from(Crypto.getRandomBytes(32), byte => byte.toString(16).padStart(2, '0')).join('');
+    Promise.all([Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, verifier), api('/auth/providers')])
+      .then(([challenge, providers]) => { if (active) setGooglePreparation({ verifier, challenge, enabled: providers.google }); })
+      .catch(() => { if (active) setGooglePreparation({ enabled: false }); });
+    return () => { active = false; };
+  }, []);
 
   const [mode, setMode] = useState(initialMode);
   const pillX = useRef(new Animated.Value(initialMode === 'signup' ? 0 : 1)).current;
@@ -49,6 +67,7 @@ export default function AuthScreen({ route, navigation }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [passwordVisible, setPasswordVisible] = useState(false);
 
   // Error state
   const [errors, setErrors] = useState({ name: '', email: '', password: '' });
@@ -58,6 +77,7 @@ export default function AuthScreen({ route, navigation }) {
     setName('');
     setEmail('');
     setPassword('');
+    setPasswordVisible(false);
     setErrors({ name: '', email: '', password: '' });
     LayoutAnimation.configureNext(
       LayoutAnimation.create(250, LayoutAnimation.Types.easeInEaseOut, LayoutAnimation.Properties.opacity)
@@ -74,43 +94,28 @@ export default function AuthScreen({ route, navigation }) {
   function pressIn() { Animated.timing(ctaScale, { toValue: 0.97, duration: 100, useNativeDriver: true }).start(); }
   function pressOut() { Animated.timing(ctaScale, { toValue: 1, duration: 120, useNativeDriver: true }).start(); }
 
-  // ─── Google OAuth Setup ───────────────────────────────────────────
-  const redirectUri = AuthSession.makeRedirectUri({
-    native: 'finalbatch://',
-  });
-
-  const [googleRequest, googleResponse, googlePromptAsync] = Google.useAuthRequest({
-    clientId: '480406645284-jm0rufqpi1aj58561vh3njscg5mh872h.apps.googleusercontent.com',
-    redirectUri,
-  });
-
-  // When Google responds, grab the user's profile and navigate to Home
-  useEffect(() => {
-    if (googleResponse?.type === 'success') {
-      const { authentication } = googleResponse;
-      // Use the access token to fetch the user's Google profile
-      fetch('https://www.googleapis.com/userinfo/v2/me', {
-        headers: { Authorization: `Bearer ${authentication.accessToken}` },
-      })
-        .then((res) => res.json())
-        .then((userInfo) => {
-          // userInfo contains: { id, email, name, picture }
-          // Later you will send this to your Lambda backend to create/find the user
-          console.log('Google user:', userInfo);
-
-          // Navigate to Home (same stack reset as normal login)
-          navigation.reset({
-            index: 0,
-            routes: [{ name: 'Home' }],
-          });
-        })
-        .catch((err) => {
-          console.error('Failed to fetch Google profile:', err);
-          Alert.alert('Google Sign-In Error', 'Could not retrieve your Google account info. Please try again.');
-        });
-    }
-  }, [googleResponse]);
-  // ─────────────────────────────────────────────────────────────────
+  async function handleGoogle() {
+    if (busy) return;
+    setBusy(true); setServerError('');
+    try {
+      if (!googlePreparation?.enabled) throw new Error('Google login needs server configuration. You can use email login meanwhile.');
+      const { verifier, challenge } = googlePreparation;
+      const redirectUri = AuthSession.makeRedirectUri({ scheme: 'finalbatch', path: 'auth' });
+      if (Platform.OS !== 'web' && /^exps?:/.test(redirectUri)) {
+        throw new Error('Google sign-in needs the FinalBatch development app. Please use email login in Expo Go.');
+      }
+      // Backend APP_AUTH_REDIRECT must match this URL. Native Google sign-in requires a development build.
+      const result = await WebBrowser.openAuthSessionAsync(`${API_URL}/auth/google?challenge=${challenge}`, redirectUri);
+      if (result.type !== 'success') return;
+      const url = new URL(result.url);
+      if (url.searchParams.get('error')) throw new Error('Google sign-in failed. If you already have an account, use your password.');
+      const code = url.searchParams.get('code');
+      if (!code) throw new Error('Google did not return a login code.');
+      await signIn(await api('/auth/exchange', { method: 'POST', body: { code, verifier } }));
+      router.replace('/(tabs)');
+    } catch (error) { setServerError(error.message); }
+    finally { setBusy(false); }
+  }
 
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -129,8 +134,8 @@ export default function AuthScreen({ route, navigation }) {
     } else if (field === 'password') {
       if (!val || val.length === 0) {
         return 'Password is required.';
-      } else if (val.length < 6) {
-        return 'Password must be at least 6 characters.';
+      } else if (mode === 'signup' && val.length < 8) {
+        return 'Password must be at least 8 characters.';
       }
     }
     return '';
@@ -167,16 +172,17 @@ export default function AuthScreen({ route, navigation }) {
     return !hasErrors;
   }
 
-  function handleSubmit() {
-    // If any validation errors exist, halt immediately — no API call, no navigation
-    if (!validate()) return;
-
-    // Reset the entire navigation stack so the user can't swipe back to Onboarding/Auth
-    navigation.reset({
-      index: 0,
-      routes: [{ name: 'Home' }],
-    });
+  async function handleSubmit() {
+    if (busy || !validate()) return;
+    setBusy(true); setServerError('');
+    try {
+      const path = mode === 'signup' ? '/auth/signup' : admin ? '/auth/admin/login' : '/auth/login';
+      await signIn(await api(path, { method: 'POST', body: { name, email, password } }));
+      router.replace('/(tabs)');
+    } catch (error) { setServerError(error.message); }
+    finally { setBusy(false); }
   }
+  if (user) return <Redirect href="/(tabs)" />;
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -240,24 +246,40 @@ export default function AuthScreen({ route, navigation }) {
 
         <View style={styles.field}>
           <Text style={styles.label}>Password</Text>
-          <TextInput
-            style={[styles.input, errors.password ? styles.inputError : null]}
-            placeholder="••••••••"
-            placeholderTextColor={COLORS.charcoalSoft}
-            secureTextEntry
-            value={password}
-            onChangeText={(text) => handleChange('password', text)}
-            onBlur={() => handleBlur('password')}
-          />
+          <View style={styles.passwordField}>
+            <TextInput
+              style={[styles.input, styles.passwordInput, errors.password ? styles.inputError : null]}
+              accessibilityLabel="Password"
+              placeholder="••••••••"
+              placeholderTextColor={COLORS.charcoalSoft}
+              secureTextEntry={!passwordVisible}
+              autoCapitalize="none"
+              autoCorrect={false}
+              value={password}
+              onChangeText={(text) => handleChange('password', text)}
+              onBlur={() => handleBlur('password')}
+            />
+            <TouchableOpacity
+              style={styles.passwordToggle}
+              accessibilityRole="button"
+              accessibilityLabel={passwordVisible ? 'Hide password' : 'Show password'}
+              accessibilityState={{ selected: passwordVisible }}
+              onPress={() => setPasswordVisible(visible => !visible)}
+            >
+              <Ionicons name={passwordVisible ? 'eye-off-outline' : 'eye-outline'} size={22} color={COLORS.charcoalSoft} />
+            </TouchableOpacity>
+          </View>
           {errors.password ? <Text style={styles.errorText}>{errors.password}</Text> : null}
         </View>
 
-        <TouchableOpacity activeOpacity={1} onPressIn={pressIn} onPressOut={pressOut} onPress={handleSubmit}>
+        <TouchableOpacity disabled={busy} activeOpacity={1} onPressIn={pressIn} onPressOut={pressOut} onPress={handleSubmit}>
           <Animated.View style={[styles.cta, { transform: [{ scale: ctaScale }] }]}>
-            <Text style={styles.ctaText}>{mode === 'signup' ? 'Create account' : 'Log in'}</Text>
+            <Text style={styles.ctaText}>{busy ? 'Please wait…' : mode === 'signup' ? 'Create account' : admin ? 'Admin log in' : 'Log in'}</Text>
           </Animated.View>
         </TouchableOpacity>
 
+        {serverError ? <Text accessibilityRole="alert" style={styles.errorText}>{serverError}</Text> : null}
+        {mode === 'login' && <TouchableOpacity disabled={busy} onPress={() => setAdmin(!admin)}><Text style={[styles.label, { marginTop: 14 }]}>{admin ? 'Switch to user login' : 'Administrator login'}</Text></TouchableOpacity>}
         <View style={styles.divider}>
           <View style={styles.dividerLine} />
           <Text style={styles.dividerText}>or</Text>
@@ -265,10 +287,13 @@ export default function AuthScreen({ route, navigation }) {
         </View>
 
         <TouchableOpacity
-          style={[styles.ghostBtn, !googleRequest && styles.ghostBtnDisabled]}
-          disabled={!googleRequest}
-          onPress={() => googlePromptAsync()}
+          style={[styles.ghostBtn, (busy || !googlePreparation) && styles.ghostBtnDisabled]}
+          disabled={busy || !googlePreparation}
+          onPress={handleGoogle}
+          accessibilityRole="button"
+          accessibilityLabel="Continue with Google"
         >
+          <Image source={require('../assets/google-signin-icon.png')} style={styles.googleIcon} accessibilityElementsHidden importantForAccessibility="no" />
           <Text style={styles.ghostBtnText}>Continue with Google</Text>
         </TouchableOpacity>
 
@@ -299,13 +324,17 @@ const styles = StyleSheet.create({
   label: { fontSize: 12, fontWeight: '700', color: COLORS.charcoalSoft, marginBottom: 6 },
   input: { paddingVertical: 13, paddingHorizontal: 14, borderRadius: 11, borderWidth: 1.5, borderColor: COLORS.line, backgroundColor: COLORS.card, fontSize: 15, color: COLORS.charcoal },
   inputError: { borderColor: COLORS.error },
+  passwordField: { position: 'relative' },
+  passwordInput: { paddingRight: 56 },
+  passwordToggle: { position: 'absolute', right: 3, top: 0, bottom: 0, width: 48, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   errorText: { marginTop: 5, fontSize: 12, color: COLORS.error, fontWeight: '600' },
   cta: { marginTop: 8, paddingVertical: 15, borderRadius: 12, backgroundColor: COLORS.ember, alignItems: 'center' },
   ctaText: { color: '#fff', fontSize: 15, fontWeight: '700' },
   divider: { flexDirection: 'row', alignItems: 'center', marginVertical: 22 },
   dividerLine: { flex: 1, height: 1, backgroundColor: COLORS.line },
   dividerText: { marginHorizontal: 10, color: COLORS.charcoalSoft, fontSize: 12 },
-  ghostBtn: { paddingVertical: 13, borderRadius: 12, borderWidth: 1.5, borderColor: COLORS.line, backgroundColor: COLORS.card, alignItems: 'center' },
+  ghostBtn: { flexDirection: 'row', justifyContent: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 13, borderRadius: 12, borderWidth: 1, borderColor: '#747775', backgroundColor: COLORS.card, alignItems: 'center' },
+  googleIcon: { width: 20, height: 20, resizeMode: 'contain' },
   ghostBtnDisabled: { opacity: 0.4 },
   ghostBtnText: { fontWeight: '700', fontSize: 14, color: COLORS.charcoal },
   badge: { marginTop: 'auto', flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', backgroundColor: 'rgba(240,180,41,0.18)', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 999 },
