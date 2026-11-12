@@ -1,419 +1,316 @@
-import { useSession } from '../src/state/Session';
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState } from "react";
 import {
   View,
   Text,
-  StyleSheet,
   ScrollView,
-  TouchableOpacity,
-  Animated,
+  Pressable,
   TextInput,
-  Dimensions,
+  RefreshControl,
   ActivityIndicator,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { StatusBar } from 'expo-status-bar';
-
-const { width } = Dimensions.get('window');
-
-const COLORS = {
-  fern:         '#1F4D3D',
-  ember:        '#E85A34',
-  sage:         '#F5F7F0',
-  card:         '#FFFFFF',
-  charcoal:     '#1C2620',
-  charcoalSoft: '#5C6B62',
-  wheat:        '#F0B429',
-  line:         '#E1E7DC',
-};
-
-const CATEGORIES = ['All', 'Bakery', 'Café', 'Restaurant', 'Produce', 'Meals'];
-
-// ─── Horizontal Listing Card (Airbnb-style) ───────────────────────────────────
-function HCard({ item, isFavourited, onToggleFavourite }) {
-  const scale = useRef(new Animated.Value(1)).current;
-  const discount = Math.round((1 - item.price / item.originalPrice) * 100);
-
-  function pressIn() {
-    Animated.spring(scale, { toValue: 0.96, useNativeDriver: true, damping: 20 }).start();
-  }
-  function pressOut() {
-    Animated.spring(scale, { toValue: 1, useNativeDriver: true, damping: 20 }).start();
-  }
-
-  return (
-    <Animated.View style={{ transform: [{ scale }] }}>
-      <TouchableOpacity
-        activeOpacity={1}
-        onPressIn={pressIn}
-        onPressOut={pressOut}
-        style={styles.hCard}
-      >
-        {/* Top: emoji area */}
-        <View style={[styles.hCardTop, { backgroundColor: item.accentColor + '26' }]}>
-          <Text style={styles.hCardEmoji}>{item.emoji}</Text>
-
-          {/* Discount badge – top left */}
-          <View style={styles.hDiscountBadge}>
-            <Text style={styles.hDiscountText}>-{discount}%</Text>
-          </View>
-
-          {/* Heart button – top right */}
-          <TouchableOpacity
-            accessibilityRole="button"
-            accessibilityLabel={`${isFavourited ? 'Remove' : 'Save'} ${item.vendorName} ${isFavourited ? 'from' : 'to'} favourites`}
-            accessibilityState={{ selected: isFavourited }}
-            style={styles.heartBtn}
-            onPress={() => onToggleFavourite(item.id)}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Text style={[styles.heartIcon, isFavourited && styles.heartIconActive]}>
-              {isFavourited ? '♥' : '♡'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Bottom: details */}
-        <View style={styles.hCardBottom}>
-          <Text style={styles.hCardName} numberOfLines={1}>{item.itemName}</Text>
-          <Text style={styles.hCardVendor} numberOfLines={1}>{item.vendorName}</Text>
-
-          <View style={styles.hPriceRow}>
-            <Text style={styles.hPrice}>${item.price.toFixed(2)}</Text>
-            <Text style={styles.hOriginalPrice}>${item.originalPrice.toFixed(2)}</Text>
-          </View>
-
-          <View style={styles.hMetaRow}>
-            <View style={styles.hPickupBadge}>
-              <Text style={styles.hPickupText}>⏱ {item.pickupStart}–{item.pickupEnd}</Text>
-            </View>
-          </View>
-
-          <View style={styles.hDistanceRow}>
-            <Text style={styles.hDistanceText}>📍 {item.distance}</Text>
-            <Text style={styles.hQtyText}>📦 {item.quantity} left</Text>
-          </View>
-        </View>
-      </TouchableOpacity>
-    </Animated.View>
-  );
-}
-
-// ─── Section with horizontal scroll ──────────────────────────────────────────
-function Section({ title, items, favourites, onToggleFavourite }) {
+} from "react-native";
+import { router } from "expo-router";
+import Ionicons from "@expo/vector-icons/Ionicons";
+import { useSession } from "../src/state/Session";
+import { useAvailableListings } from "../src/state/useAvailableListings";
+import { useTheme } from "../src/design/Theme";
+import { Page, ListingCard, Notice, Button } from "../src/components/MarketUI";
+const categories = [
+  ["All", "grid-outline"],
+  ["Bakery", "cafe-outline"],
+  ["Café", "cafe-outline"],
+  ["Restaurant", "restaurant-outline"],
+  ["Produce", "leaf-outline"],
+  ["Meals", "fast-food-outline"],
+];
+function Section({ title, subtitle, items, favourites, onSave }) {
+  const { colors: c } = useTheme();
   const [expanded, setExpanded] = useState(false);
-  if (items.length === 0) return null;
+  if (!items.length) return null;
   return (
-    <View style={styles.section}>
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>{title}</Text>
-        <TouchableOpacity onPress={() => setExpanded(!expanded)}>
-          <Text style={styles.seeAll}>{expanded ? 'Show less' : 'See all →'}</Text>
-        </TouchableOpacity>
+    <View style={{ gap: 15, marginBottom: 18 }}>
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 12,
+          paddingHorizontal: 22,
+        }}
+      >
+        <View style={{ flex: 1 }}>
+          <Text
+            accessibilityRole="header"
+            style={{
+              fontSize: 23,
+              fontWeight: "700",
+              letterSpacing: -0.7,
+              color: c.ink,
+            }}
+          >
+            {title}
+          </Text>
+          <Text style={{ fontSize: 13, color: c.muted, marginTop: 4 }}>
+            {subtitle}
+          </Text>
+        </View>
+        <Pressable
+          accessibilityLabel={`${expanded ? "Collapse" : "See all"} ${title}`}
+          accessibilityRole="button"
+          onPress={() => setExpanded((v) => !v)}
+          style={{
+            width: 44,
+            height: 44,
+            borderRadius: 22,
+            backgroundColor: c.tint,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Ionicons
+            name={expanded ? "chevron-up" : "arrow-forward"}
+            color={c.ink}
+            size={21}
+          />
+        </Pressable>
       </View>
       <ScrollView
         horizontal={!expanded}
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.hScroll}
+        contentContainerStyle={{ paddingHorizontal: 22, gap: 18 }}
       >
         {items.map((item) => (
-          <HCard
+          <ListingCard
             key={item.id}
             item={item}
-            isFavourited={favourites.has(item.id)}
-            onToggleFavourite={onToggleFavourite}
+            wide={expanded}
+            saved={favourites.has(item.id)}
+            onSave={onSave}
           />
         ))}
       </ScrollView>
     </View>
   );
 }
-
-// ─── HomeScreen ───────────────────────────────────────────────────────────────
 export default function HomeScreen() {
-  const { user, favourites, toggleFavourite: onToggleFavourite, listings, loadError, loadingListings, retry } = useSession();
-  const [search, setSearch] = useState('');
-  const CLOSEST = [...listings].sort((a, b) => parseFloat(a.distance) - parseFloat(b.distance));
-  const POPULAR = listings.filter(item => item.id.startsWith('p'));
-  const NEWEST = listings.filter(item => item.id.startsWith('n'));
-  const [activeCategory, setActiveCategory] = useState('All');
-
-  function filterSection(arr) {
-    return arr.filter(l => (activeCategory === 'All' || l.tag === activeCategory) && `${l.itemName} ${l.vendorName}`.toLowerCase().includes(search.trim().toLowerCase()));
-  }
-
-  const closestFiltered  = filterSection(CLOSEST);
-  const popularFiltered  = filterSection(POPULAR);
-  const newestFiltered   = filterSection(NEWEST);
-  const noResults =
-    closestFiltered.length === 0 &&
-    popularFiltered.length === 0 &&
-    newestFiltered.length === 0;
-
-  // Header animation
-  const headerAnim = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    Animated.spring(headerAnim, {
-      toValue: 1,
-      damping: 22,
-      stiffness: 160,
-      useNativeDriver: true,
-    }).start();
-  }, []);
-
+  const {
+    user,
+    listings,
+    favourites,
+    toggleFavourite,
+    loadError,
+    loadingListings,
+    retry,
+  } = useSession();
+  const { colors: c } = useTheme();
+  const [query, setQuery] = useState(""),
+    [category, setCategory] = useState("All");
+  const { items: availableListings, now } = useAvailableListings(listings);
+  const items = availableListings.filter(
+    (l) =>
+      (category === "All" || l.tag === category) &&
+      `${l.itemName} ${l.vendorName} ${l.address}`
+        .toLowerCase()
+        .includes(query.trim().toLowerCase()),
+  );
+  const ready = items.filter((l) => +new Date(l.pickupStart) <= now);
+  const closing = [...items].sort(
+    (a, b) => new Date(a.pickupEnd) - new Date(b.pickupEnd),
+  );
   return (
-    <SafeAreaView style={styles.screen}>
-      <StatusBar style="dark" />
-
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
-
-        {/* ── Header ── */}
-        <Animated.View
-          style={[
-            styles.header,
-            {
-              opacity: headerAnim,
-              transform: [
-                { translateY: headerAnim.interpolate({ inputRange: [0, 1], outputRange: [-12, 0] }) },
-              ],
-            },
-          ]}
-        >
-          <View>
-            <Text style={styles.greeting}>Hello, {user?.name?.split(' ')[0] || 'there'} 👋</Text>
-            <View style={styles.locationRow}>
-              <Text style={styles.locationPin}>📍</Text>
-              <Text style={styles.locationText}>Plattsburgh, NY</Text>
-            </View>
-          </View>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{user?.name?.[0]?.toUpperCase() || '?'}</Text>
-          </View>
-        </Animated.View>
-
-        {/* ── Search bar ── */}
-        <View style={styles.searchBar}>
-          <Text style={styles.searchIcon}>🔍</Text>
-          <TextInput
-            value={search}
-            onChangeText={setSearch}
-            style={styles.searchInput}
-            placeholder="Search for food near you..."
-            placeholderTextColor={COLORS.charcoalSoft}
+    <Page title="" scroll={false}>
+      <ScrollView
+        refreshControl={
+          <RefreshControl
+            refreshing={loadingListings}
+            onRefresh={retry}
+            tintColor={c.green}
           />
+        }
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ paddingBottom: 24, gap: 20 }}
+      >
+        <View style={{ paddingHorizontal: 22, paddingTop: 12, gap: 20 }}>
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+          >
+            <View>
+              <Text
+                style={{
+                  color: c.green,
+                  fontSize: 25,
+                  fontWeight: "800",
+                  letterSpacing: -1,
+                }}
+              >
+                finalbatch<Text style={{ color: c.accent }}>.</Text>
+              </Text>
+              <Text style={{ color: c.muted, fontSize: 13, marginTop: 4 }}>
+                Good food. Another chance.
+              </Text>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Open profile"
+              onPress={() => router.push("/profile")}
+              style={{
+                height: 44,
+                width: 44,
+                borderRadius: 22,
+                backgroundColor: c.tint,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Text style={{ color: c.green, fontWeight: "700" }}>
+                {user?.name?.[0]?.toUpperCase()}
+              </Text>
+            </Pressable>
+          </View>
+          <View
+            style={{
+              minHeight: 58,
+              borderRadius: 30,
+              backgroundColor: c.surface,
+              borderWidth: 1,
+              borderColor: c.line,
+              flexDirection: "row",
+              gap: 12,
+              alignItems: "center",
+              paddingHorizontal: 20,
+              boxShadow: "0 5px 18px rgba(20,45,29,0.06)",
+            }}
+          >
+            <Ionicons name="search-outline" size={22} color={c.ink} />
+            <TextInput
+              accessibilityLabel="Search listings"
+              placeholder="Find your next good bite"
+              value={query}
+              onChangeText={setQuery}
+              placeholderTextColor={c.muted}
+              style={{
+                flex: 1,
+                color: c.ink,
+                fontSize: 15,
+                paddingVertical: 18,
+              }}
+            />
+          </View>
         </View>
-
-        {/* ── Category filters ── */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.categories}
+          contentContainerStyle={{ paddingHorizontal: 22, gap: 10 }}
         >
-          {CATEGORIES.map((cat) => {
-            const active = cat === activeCategory;
-            return (
-              <TouchableOpacity
-                key={cat}
-                style={[styles.catPill, active && styles.catPillActive]}
-                onPress={() => setActiveCategory(cat)}
+          {categories.map(([name, icon]) => (
+            <Pressable
+              key={name}
+              accessibilityRole="button"
+              accessibilityState={{ selected: category === name }}
+              onPress={() => setCategory(name)}
+              style={{
+                minHeight: 46,
+                paddingHorizontal: 16,
+                borderRadius: 24,
+                borderWidth: 1,
+                borderColor: category === name ? c.green : c.line,
+                backgroundColor: category === name ? c.green : c.surface,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 8,
+              }}
+            >
+              <Ionicons
+                name={icon}
+                size={17}
+                color={category === name ? c.onGreen : c.ink}
+              />
+              <Text
+                style={{
+                  color: category === name ? c.onGreen : c.ink,
+                  fontWeight: "600",
+                }}
               >
-                <Text style={[styles.catText, active && styles.catTextActive]}>{cat}</Text>
-              </TouchableOpacity>
-            );
-          })}
+                {name}
+              </Text>
+            </Pressable>
+          ))}
         </ScrollView>
-
-        <Text style={{ paddingHorizontal: 22, color: COLORS.charcoalSoft, marginBottom: 16 }}>Demo listings · distances and popularity are sample data</Text>
-        {loadError ? <TouchableOpacity onPress={retry}><Text accessibilityRole="alert" style={{ padding: 22, color: COLORS.ember }}>{loadError} Tap to retry.</Text></TouchableOpacity> : null}
-        {favourites.size > 0 && <Section title="Your favourite places" items={filterSection(listings.filter(item => favourites.has(item.id)))} favourites={favourites} onToggleFavourite={onToggleFavourite} />}
-        {/* ── Sections ── */}
-        {loadingListings ? <ActivityIndicator color={COLORS.fern} /> : noResults ? (
-          <View style={styles.empty}>
-            <Text style={styles.emptyEmoji}>🍽️</Text>
-            <Text style={styles.emptyText}>No listings in this category right now.</Text>
+        {loadError ? (
+          <View style={{ paddingHorizontal: 22, gap: 10 }}>
+            <Notice error>{loadError}</Notice>
+            <Button title="Try again" secondary onPress={retry} />
+          </View>
+        ) : null}
+        {loadingListings && !availableListings.length ? (
+          <ActivityIndicator color={c.green} />
+        ) : !items.length && !loadError ? (
+          <View style={{ padding: 22, gap: 15 }}>
+            <Text style={{ fontSize: 25, fontWeight: "700", color: c.ink }}>
+              {availableListings.length
+                ? "Nothing matches just yet."
+                : "The next good batch starts here."}
+            </Text>
+            <Text style={{ color: c.muted, lineHeight: 22 }}>
+              {availableListings.length
+                ? "Try another category or search."
+                : "There are no available listings yet. Vendors can publish real photos, quantities, and pickup times."}
+            </Text>
+            <Button
+              title="List surplus food"
+              icon="add-outline"
+              onPress={() => router.push("/vendor")}
+            />
           </View>
         ) : (
           <>
             <Section
-              title="Closest to you"
-              items={closestFiltered}
+              title="Ready for pickup"
+              subtitle="Available to collect now"
+              items={ready}
               favourites={favourites}
-              onToggleFavourite={onToggleFavourite}
+              onSave={toggleFavourite}
             />
             <Section
-              title="Popular in your area"
-              items={popularFiltered}
+              title="Before they’re gone"
+              subtitle="The soonest pickup windows"
+              items={closing}
               favourites={favourites}
-              onToggleFavourite={onToggleFavourite}
+              onSave={toggleFavourite}
             />
             <Section
-              title="Newest listings"
-              items={newestFiltered}
+              title="Freshly listed"
+              subtitle="The latest batches from local vendors"
+              items={items}
               favourites={favourites}
-              onToggleFavourite={onToggleFavourite}
+              onSave={toggleFavourite}
             />
           </>
         )}
-
-        {/* ── Sustainability banner ── */}
-        <View style={styles.banner}>
-          <View style={styles.bannerDot} />
-          <Text style={styles.bannerText}>
-            Vendors near you saved <Text style={styles.bannerBold}>340 lbs</Text> of food this week 🌱
-          </Text>
+        <View
+          style={{
+            marginHorizontal: 22,
+            padding: 20,
+            borderRadius: 20,
+            backgroundColor: c.tint,
+            flexDirection: "row",
+            gap: 13,
+          }}
+        >
+          <Ionicons name="leaf-outline" size={25} color={c.green} />
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontWeight: "700", color: c.ink, fontSize: 16 }}>
+              A little less waste. A lot more good.
+            </Text>
+            <Text style={{ color: c.muted, lineHeight: 20, marginTop: 5 }}>
+              Reserve a batch, meet your vendor, and collect during its pickup
+              window.
+            </Text>
+          </View>
         </View>
-
       </ScrollView>
-    </SafeAreaView>
+    </Page>
   );
 }
-
-// ─── Styles ───────────────────────────────────────────────────────────────────
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: COLORS.sage },
-  scroll: { paddingBottom: 100 },
-
-  // Header
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    paddingHorizontal: 22,
-    paddingTop: 20,
-    paddingBottom: 16,
-  },
-  greeting: { fontSize: 22, fontWeight: '800', color: COLORS.charcoal, letterSpacing: -0.4 },
-  locationRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
-  locationPin: { fontSize: 12, marginRight: 3 },
-  locationText: { fontSize: 13, color: COLORS.charcoalSoft, fontWeight: '600' },
-  avatar: {
-    width: 42, height: 42, borderRadius: 21,
-    backgroundColor: COLORS.fern, alignItems: 'center', justifyContent: 'center',
-  },
-  avatarText: { color: COLORS.sage, fontWeight: '800', fontSize: 16 },
-
-  // Search
-  searchBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.card,
-    marginHorizontal: 22,
-    marginBottom: 18,
-    borderRadius: 13,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderWidth: 1.5,
-    borderColor: COLORS.line,
-    gap: 8,
-  },
-  searchIcon: { fontSize: 15 },
-  searchInput: { flex: 1, fontSize: 15, color: COLORS.charcoal },
-
-  // Categories
-  categories: { paddingHorizontal: 22, paddingBottom: 20, gap: 8 },
-  catPill: {
-    paddingHorizontal: 16, paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: COLORS.card,
-    borderWidth: 1.5, borderColor: COLORS.line,
-  },
-  catPillActive: { backgroundColor: COLORS.fern, borderColor: COLORS.fern },
-  catText: { fontSize: 13, fontWeight: '700', color: COLORS.charcoalSoft },
-  catTextActive: { color: COLORS.sage },
-
-  // Section
-  section: { marginBottom: 8 },
-  sectionHeader: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: 22, marginBottom: 14,
-  },
-  sectionTitle: { fontSize: 18, fontWeight: '800', color: COLORS.charcoal, letterSpacing: -0.3 },
-  seeAll: { fontSize: 13, fontWeight: '700', color: COLORS.fern },
-
-  // Horizontal scroll
-  hScroll: { paddingHorizontal: 22, gap: 14, paddingBottom: 8 },
-
-  // Horizontal card
-  hCard: {
-    width: 200,
-    backgroundColor: COLORS.card,
-    borderRadius: 18,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: COLORS.line,
-    shadowColor: COLORS.charcoal,
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
-  },
-  hCardTop: {
-    height: 110,
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-  },
-  hCardEmoji: { fontSize: 44 },
-
-  // Discount badge
-  hDiscountBadge: {
-    position: 'absolute',
-    top: 10, left: 10,
-    backgroundColor: COLORS.fern,
-    paddingHorizontal: 7, paddingVertical: 3,
-    borderRadius: 8,
-  },
-  hDiscountText: { fontSize: 11, fontWeight: '800', color: '#FFFFFF' },
-
-  // Heart
-  heartBtn: {
-    position: 'absolute',
-    top: 8, right: 10,
-    width: 30, height: 30,
-    borderRadius: 15,
-    backgroundColor: 'rgba(255,255,255,0.85)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  heartIcon: { fontSize: 17, color: COLORS.charcoalSoft },
-  heartIconActive: { color: COLORS.ember },
-
-  // Card bottom
-  hCardBottom: { padding: 12, gap: 5 },
-  hCardName: { fontSize: 14, fontWeight: '800', color: COLORS.charcoal, letterSpacing: -0.2 },
-  hCardVendor: { fontSize: 11, color: COLORS.charcoalSoft, fontWeight: '500' },
-  hPriceRow: { flexDirection: 'row', alignItems: 'baseline', gap: 5, marginTop: 2 },
-  hPrice: { fontSize: 16, fontWeight: '800', color: COLORS.charcoal },
-  hOriginalPrice: { fontSize: 12, color: COLORS.charcoalSoft, textDecorationLine: 'line-through' },
-  hMetaRow: { marginTop: 2 },
-  hPickupBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(240,180,41,0.15)',
-    paddingHorizontal: 7, paddingVertical: 3, borderRadius: 7,
-  },
-  hPickupText: { fontSize: 10, fontWeight: '700', color: '#8A5E0C' },
-  hDistanceRow: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4,
-  },
-  hDistanceText: { fontSize: 10, color: COLORS.charcoalSoft, fontWeight: '600' },
-  hQtyText: { fontSize: 10, color: COLORS.charcoalSoft, fontWeight: '600' },
-
-  // Empty
-  empty: { alignItems: 'center', paddingVertical: 60 },
-  emptyEmoji: { fontSize: 48, marginBottom: 12 },
-  emptyText: { fontSize: 15, color: COLORS.charcoalSoft, fontWeight: '600' },
-
-  // Banner
-  banner: {
-    flexDirection: 'row', alignItems: 'center',
-    marginHorizontal: 22, marginTop: 20,
-    backgroundColor: 'rgba(240,180,41,0.15)',
-    paddingVertical: 14, paddingHorizontal: 16,
-    borderRadius: 14,
-  },
-  bannerDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: COLORS.wheat, marginRight: 10 },
-  bannerText: { flex: 1, fontSize: 13, color: '#7A520A', lineHeight: 19 },
-  bannerBold: { fontWeight: '800' },
-});
-
-// Export all listings so other screens can consume them

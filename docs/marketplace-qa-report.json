@@ -1,0 +1,14 @@
+{
+  "passed": [
+    "Empty database shows an honest empty state",
+    "Vendor creates business, selects actual photo, uploads and publishes through UI",
+    "Real photo renders; vendor favourite survives reload",
+    "Buyer reserves at database price and sees confirmed receipt",
+    "Cancellation restores stock once",
+    "Lost response is reconciled without a second reservation POST",
+    "Vendor confirms customer collection through UI",
+    "Dark appearance persists",
+    "No page-level horizontal overflow at 320, 390 and 768 widths"
+  ],
+  "errors": []
+}

@@ -1,3 +1,13 @@
+# FinalBatch marketplace update
+
+Vendor publishing, real photos, pickup presets/calendar controls, shop location, authenticated reservations, a ten-minute pickup grace period, private customer/vendor chat, human moderation and light/dark marketplace themes are implemented. Payments remain out of scope.
+
+See [pickup, location and messaging](docs/PICKUP_AND_MESSAGES.md) for the new flows. The API can run locally or through the prepared Lambda adapter; adding deployment files does not deploy it to AWS.
+
+Start with [the current setup and Lambda deployment guide](docs/SERVERLESS.md). Review [design decisions](docs/DESIGN.md) and [verification](docs/QA.md). The older Lambda files `getListings.js` and `createOrder.js` are legacy examples; deploy `backend/lambda.handler` through the new template instead.
+
+---
+
 # FinalBatch
 
 A food-rescue mobile app that connects vendors with surplus food to nearby consumers.
@@ -7,7 +17,7 @@ A food-rescue mobile app that connects vendors with surplus food to nearby consu
 ```
 FinalBatch/
 ├── database/          # PostgreSQL schema, seed data, and verification queries
-├── backend/           # AWS Lambda functions (Node.js) — REST API over AWS RDS
+├── backend/           # Express API (Node.js), optional Lambda adapter, PostgreSQL/RDS
 └── frontend/          # React Native (Expo) mobile app
 ```
 
@@ -21,13 +31,9 @@ Three SQL files for the PostgreSQL database hosted on AWS RDS:
 
 ## Backend (`backend/`)
 
-AWS Lambda functions that expose a REST API via API Gateway, connected to the RDS database.
+`server.js` runs the Express API locally; `lambda.js` wraps the same API for an optional AWS SAM deployment. PostgreSQL/RDS stores accounts, published listings, reservations, presets and conversations. Private S3 stores listing photos. The old `getListings.js` / `createOrder.js` handlers are legacy examples; use the current API and migrations.
 
-- `getListings.js` — `GET /listings` — returns active food listings
-- `createOrder.js` — `POST /orders` — creates an order and decrements inventory
-
-**Environment variables required on Lambda:**
-- `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`
+Configuration belongs in the ignored `backend/.env`; use `backend/.env.example` as the template.
 
 To install dependencies:
 ```bash
@@ -52,10 +58,9 @@ Scan the QR code with the Expo Go app on your phone to run it.
 The Express API (`backend/server.js`) now handles Passport local and Google sign-in,
 PostgreSQL accounts, JWT-protected profiles, and saved favourite places. The legacy
 Lambda handlers above are separate; deploy the Express API to use these new routes.
-The Explore page uses the eight demo listings served by `/listings`. Distance and
-popularity are sample data. Saving a heart saves that vendor's place for the signed-in
+The Explore page uses vendor-published PostgreSQL listings served by `/listings`, with actual vendor-uploaded S3 photos. Distance, popularity and ratings are not fabricated. Saving a heart saves that vendor's place for the signed-in
 account; it appears on Explore and in **Favourites**, and survives signing out or
-restarting the app. Messages currently shows an empty inbox; messaging is not implemented.
+restarting the app. Messages connects customers and vendors privately; email and phone remain fallbacks.
 
 ### Database and server
 
@@ -116,7 +121,7 @@ that Express API. A physical phone needs your computer's LAN IP (or deployed HTT
 API URL); `localhost` on a phone refers to the phone itself.
 
 Run `npm install` then `npx expo start` in `frontend`. Navigation now uses Expo
-Router with **Explore**, **Favourites**, **Messages**, and **Profile** tabs. Native
+Router with **Explore**, **Favourites**, **Pickups**, **Messages**, and **Profile** tabs. Native
 Google sign-in needs a development/production build that registers the
 `finalbatch` scheme; Expo Go is not sufficient for this custom callback. Email
 login can be tested in Expo Go. Native tokens use SecureStore; web tokens use

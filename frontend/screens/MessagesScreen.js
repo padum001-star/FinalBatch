@@ -1,185 +1,130 @@
-import React from 'react';
+import React, { useCallback, useState } from "react";
 import {
   View,
   Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { StatusBar } from 'expo-status-bar';
-
-const COLORS = {
-  fern:         '#1F4D3D',
-  ember:        '#E85A34',
-  sage:         '#F5F7F0',
-  card:         '#FFFFFF',
-  charcoal:     '#1C2620',
-  charcoalSoft: '#5C6B62',
-  wheat:        '#F0B429',
-  line:         '#E1E7DC',
-};
-
-// Mock message threads
-const MOCK_THREADS = [];
-
-function ThreadItem({ thread }) {
-  return (
-    <TouchableOpacity style={styles.thread} activeOpacity={0.7}>
-      {/* Avatar */}
-      <View style={styles.threadAvatar}>
-        <Text style={styles.threadEmoji}>{thread.vendorEmoji}</Text>
-        {thread.unread && <View style={styles.unreadDot} />}
-      </View>
-
-      {/* Content */}
-      <View style={styles.threadContent}>
-        <View style={styles.threadTopRow}>
-          <Text style={[styles.threadName, thread.unread && styles.threadNameUnread]} numberOfLines={1}>
-            {thread.vendorName}
-          </Text>
-          <Text style={[styles.threadTime, thread.unread && styles.threadTimeUnread]}>
-            {thread.timeAgo}
-          </Text>
-        </View>
-        <Text
-          style={[styles.threadPreview, thread.unread && styles.threadPreviewUnread]}
-          numberOfLines={2}
-        >
-          {thread.lastMessage}
-        </Text>
-      </View>
-    </TouchableOpacity>
-  );
-}
-
+  Pressable,
+  RefreshControl,
+  ActivityIndicator,
+} from "react-native";
+import Ionicons from "@expo/vector-icons/Ionicons";
+import { router } from "expo-router";
+import { useSession } from "../src/state/Session";
+import { api } from "../src/state/api";
+import { useActiveRefresh } from "../src/state/useActiveRefresh";
+import { useTheme } from "../src/design/Theme";
+import { Page, Button, Notice } from "../src/components/MarketUI";
 export default function MessagesScreen() {
+  const { user } = useSession();
+  return <Inbox key={user?.id || "guest"} />;
+}
+function Inbox() {
+  const { token, user } = useSession(),
+    { colors: c } = useTheme();
+  const [items, setItems] = useState([]),
+    [error, setError] = useState(""),
+    [loading, setLoading] = useState(false);
+  const load = useCallback(async () => {
+    if (!token) return;
+    setLoading(true);
+    try {
+      setItems(await api("/conversations", { token }));
+      setError("");
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [token]);
+  useActiveRefresh(load);
   return (
-    <SafeAreaView style={styles.screen}>
-      <StatusBar style="dark" />
-
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Messages</Text>
-        <View style={styles.headerBadge}>
-          <Text style={styles.headerBadgeText}>0 new</Text>
-        </View>
-      </View>
-
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
-
-        {/* Section label */}
-        <Text style={styles.sectionLabel}>Recent</Text>
-
-        {/* Threads */}
-        <View style={styles.threadList}>
-          {MOCK_THREADS.map((thread, index) => (
-            <React.Fragment key={thread.id}>
-              <ThreadItem thread={thread} />
-              {index < MOCK_THREADS.length - 1 && <View style={styles.divider} />}
-            </React.Fragment>
-          ))}
-        </View>
-
-        {/* Footer hint */}
-        <View style={styles.hintBox}>
-          <Text style={styles.hintEmoji}>💬</Text>
-          <Text style={styles.hintText}>
-            Messages from vendors about your pickups will appear here.
+    <Page
+      title="Messages"
+      subtitle="A quick question. An easier pickup."
+      refreshControl={
+        <RefreshControl
+          refreshing={loading}
+          onRefresh={load}
+          tintColor={c.green}
+        />
+      }
+    >
+      {error ? (
+        <>
+          <Notice error>{error}</Notice>
+          <Button title="Try again" secondary onPress={load} />
+        </>
+      ) : null}
+      {loading && !items.length ? <ActivityIndicator color={c.green} /> : null}
+      {!loading && !error && !items.length ? (
+        <>
+          <Notice>
+            No conversations yet. Open a listing and tap Message vendor, or
+            start a chat from your pickups.
+          </Notice>
+          <Button
+            title="Explore food"
+            secondary
+            onPress={() => router.navigate("/")}
+          />
+        </>
+      ) : null}
+      {items.map((item) => (
+        <Pressable
+          key={item.conversation_id}
+          accessibilityRole="button"
+          accessibilityLabel={`Message ${item.customer_id === user?.id ? item.business_name : item.customer_name} about ${item.item_name}`}
+          onPress={() =>
+            router.push({
+              pathname: "/conversation/[id]",
+              params: { id: item.conversation_id },
+            })
+          }
+          style={({ pressed }) => ({
+            padding: 18,
+            borderRadius: 20,
+            borderWidth: 1,
+            borderColor: c.line,
+            backgroundColor: c.surface,
+            gap: 8,
+            opacity: pressed ? 0.8 : 1,
+          })}
+        >
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+            <View
+              style={{
+                width: 42,
+                height: 42,
+                borderRadius: 21,
+                alignItems: "center",
+                justifyContent: "center",
+                backgroundColor: c.tint,
+              }}
+            >
+              <Ionicons name="chatbubble-outline" size={20} color={c.green} />
+            </View>
+            <View style={{ flex: 1, gap: 3 }}>
+              <Text
+                numberOfLines={1}
+                style={{ fontWeight: "700", fontSize: 18, color: c.ink }}
+              >
+                {item.customer_id === user?.id
+                  ? item.business_name
+                  : item.customer_name}
+              </Text>
+              <Text numberOfLines={1} style={{ color: c.muted }}>
+                {item.item_name}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={c.muted} />
+          </View>
+          <Text numberOfLines={2} style={{ color: c.muted, lineHeight: 21 }}>
+            {item.last_message || "Start the conversation."}
           </Text>
-        </View>
-
-      </ScrollView>
-    </SafeAreaView>
+          <Text style={{ fontSize: 12, color: c.muted }}>
+            {new Date(item.last_message_at || item.created_at).toLocaleString()}
+          </Text>
+        </Pressable>
+      ))}
+    </Page>
   );
 }
-
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: COLORS.sage },
-  scroll: { paddingBottom: 100 },
-
-  // Header
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 22,
-    paddingTop: 20,
-    paddingBottom: 18,
-  },
-  headerTitle: { fontSize: 26, fontWeight: '800', color: COLORS.charcoal, letterSpacing: -0.5 },
-  headerBadge: {
-    backgroundColor: COLORS.ember,
-    borderRadius: 12,
-    paddingHorizontal: 9, paddingVertical: 3,
-  },
-  headerBadgeText: { fontSize: 12, fontWeight: '800', color: '#FFFFFF' },
-
-  // Section label
-  sectionLabel: {
-    fontSize: 12, fontWeight: '700', color: COLORS.charcoalSoft,
-    letterSpacing: 0.8, textTransform: 'uppercase',
-    paddingHorizontal: 22, marginBottom: 8,
-  },
-
-  // Thread list
-  threadList: {
-    marginHorizontal: 20,
-    backgroundColor: COLORS.card,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: COLORS.line,
-    overflow: 'hidden',
-    shadowColor: COLORS.charcoal,
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 2,
-  },
-  thread: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    padding: 16,
-    gap: 14,
-  },
-
-  // Avatar
-  threadAvatar: {
-    width: 50, height: 50, borderRadius: 25,
-    backgroundColor: COLORS.sage,
-    alignItems: 'center', justifyContent: 'center',
-    position: 'relative',
-  },
-  threadEmoji: { fontSize: 24 },
-  unreadDot: {
-    position: 'absolute', top: 1, right: 1,
-    width: 11, height: 11, borderRadius: 6,
-    backgroundColor: COLORS.ember,
-    borderWidth: 2, borderColor: COLORS.card,
-  },
-
-  // Content
-  threadContent: { flex: 1, gap: 4 },
-  threadTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  threadName: {
-    flex: 1, fontSize: 15, fontWeight: '600', color: COLORS.charcoal, letterSpacing: -0.1,
-  },
-  threadNameUnread: { fontWeight: '800' },
-  threadTime: { fontSize: 12, color: COLORS.charcoalSoft, fontWeight: '500' },
-  threadTimeUnread: { color: COLORS.ember, fontWeight: '700' },
-  threadPreview: { fontSize: 13, color: COLORS.charcoalSoft, lineHeight: 18, fontWeight: '400' },
-  threadPreviewUnread: { color: COLORS.charcoal, fontWeight: '600' },
-
-  divider: { height: 1, backgroundColor: COLORS.line, marginLeft: 80 },
-
-  // Hint
-  hintBox: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    marginHorizontal: 20, marginTop: 24,
-    backgroundColor: 'rgba(31,77,61,0.07)',
-    paddingVertical: 14, paddingHorizontal: 16,
-    borderRadius: 14,
-  },
-  hintEmoji: { fontSize: 20 },
-  hintText: { flex: 1, fontSize: 13, color: COLORS.charcoalSoft, lineHeight: 18, fontWeight: '500' },
-});

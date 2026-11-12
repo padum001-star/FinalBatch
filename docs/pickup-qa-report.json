@@ -1,0 +1,23 @@
+{
+  "passed": [
+    "Empty database shows an honest empty state",
+    "Current location permission sets and persists the shop pin",
+    "Calendar/time controls and default pickup presets survive reload",
+    "Camera/gallery/Files controls exist; Files rejects PDF and accepts a real optimized photo",
+    "Vendor creates business, selects actual photo, uploads and publishes through UI",
+    "Real photo renders; vendor favourite survives reload",
+    "Buyer reserves at database price and sees confirmed receipt",
+    "Lost message response retries through UI without duplicate database messages",
+    "Customer and vendor exchange private in-app messages across separate sessions",
+    "Cancellation restores stock once",
+    "Lost response is reconciled without a second reservation POST",
+    "Vendor confirms customer collection through UI",
+    "Dark appearance persists",
+    "No page-level horizontal overflow at 320, 390 and 768 widths",
+    "A report reaches review without automatically hiding the listing",
+    "Owner admin removes a reported listing; feed hides it and reservation history survives",
+    "Open feed hides expired food locally without API polling",
+    "Real grace deadline expires once while pickup screen is open, retaining active-first history"
+  ],
+  "errors": []
+}

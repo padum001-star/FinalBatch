@@ -1,0 +1,23 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "InspectListingBucket",
+      "Effect": "Allow",
+      "Action": ["s3:GetBucketLocation", "s3:ListBucket"],
+      "Resource": "arn:aws:s3:::finalbatch-listing-photos-845191827227-us-east-1"
+    },
+    {
+      "Sid": "ReadWriteListingPhotos",
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:PutObject"],
+      "Resource": "arn:aws:s3:::finalbatch-listing-photos-845191827227-us-east-1/listings/*"
+    },
+    {
+      "Sid": "RemoveTemporaryVerificationObjects",
+      "Effect": "Allow",
+      "Action": "s3:DeleteObject",
+      "Resource": "arn:aws:s3:::finalbatch-listing-photos-845191827227-us-east-1/listings/_checks/*"
+    }
+  ]
+}

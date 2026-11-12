@@ -1,0 +1,24 @@
+[
+  {
+    "AllowedOrigins": [
+      "http://localhost:8081",
+      "http://localhost:8082",
+      "http://127.0.0.1:8081",
+      "http://127.0.0.1:8082"
+    ],
+    "AllowedMethods": [
+      "GET",
+      "PUT",
+      "HEAD"
+    ],
+    "AllowedHeaders": [
+      "Content-Type",
+      "x-amz-*",
+      "If-None-Match"
+    ],
+    "ExposeHeaders": [
+      "ETag"
+    ],
+    "MaxAgeSeconds": 300
+  }
+]
