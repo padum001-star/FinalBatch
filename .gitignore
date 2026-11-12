@@ -3,3 +3,10 @@ node_modules/
 .expo/
 .env
 .env*.local
+
+.aws-sam/
+samconfig.toml
+.env.*
+!.env.example
+*.pem
+!backend/certs/rds-global-bundle.pem

@@ -1,0 +1,120 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: FinalBatch request-driven API and private vendor photo storage
+Parameters:
+  DatabaseSecretArn:
+    Type: String
+    Description: Secrets Manager JSON secret with PGHOST, PGDATABASE, PGUSER, PGPASSWORD, JWT_SECRET, SESSION_SECRET
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Private database VPC subnets with outbound HTTPS access (existing NAT or required VPC endpoints)
+  SecurityGroupIds:
+    Type: List<AWS::EC2::SecurityGroup::Id>
+  WebOrigin:
+    Type: String
+    Default: http://localhost:8081
+  GoogleCallbackUrl:
+    Type: String
+    Default: ""
+  GoogleClientId:
+    Type: String
+    Default: ""
+  GoogleSecretArn:
+    Type: String
+    Default: ""
+    Description: Optional Secrets Manager JSON secret containing GOOGLE_CLIENT_SECRET
+  AppAuthRedirect:
+    Type: String
+    Default: finalbatch://auth
+  AdminEmail:
+    Type: String
+    Default: ""
+Conditions:
+  GoogleEnabled: !Not [!Equals [!Ref GoogleSecretArn, ""]]
+Resources:
+  Photos:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins: [!Ref WebOrigin]
+            AllowedMethods: [GET, PUT, HEAD]
+            AllowedHeaders: ["Content-Type", "x-amz-*", "If-None-Match"]
+            MaxAge: 300
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: $default
+      DefaultRouteSettings:
+        ThrottlingBurstLimit: 20
+        ThrottlingRateLimit: 10
+  Api:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: backend/
+      Handler: lambda.handler
+      Runtime: nodejs22.x
+      MemorySize: 512
+      Timeout: 28
+      ReservedConcurrentExecutions: 5
+      VpcConfig:
+        SubnetIds: !Ref SubnetIds
+        SecurityGroupIds: !Ref SecurityGroupIds
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref Photos
+      Environment:
+        Variables:
+          NODE_ENV: production
+          PGPOOL_MAX: "2"
+          PGHOST: !Sub "{{resolve:secretsmanager:${DatabaseSecretArn}:SecretString:PGHOST}}"
+          PGDATABASE: !Sub "{{resolve:secretsmanager:${DatabaseSecretArn}:SecretString:PGDATABASE}}"
+          PGUSER: !Sub "{{resolve:secretsmanager:${DatabaseSecretArn}:SecretString:PGUSER}}"
+          PGPASSWORD: !Sub "{{resolve:secretsmanager:${DatabaseSecretArn}:SecretString:PGPASSWORD}}"
+          JWT_SECRET: !Sub "{{resolve:secretsmanager:${DatabaseSecretArn}:SecretString:JWT_SECRET}}"
+          SESSION_SECRET: !Sub "{{resolve:secretsmanager:${DatabaseSecretArn}:SecretString:SESSION_SECRET}}"
+          PGSSLROOTCERT: certs/rds-global-bundle.pem
+          CORS_ORIGINS: !Ref WebOrigin
+          APP_AUTH_REDIRECT: !Ref AppAuthRedirect
+          GOOGLE_CALLBACK_URL: !Ref GoogleCallbackUrl
+          GOOGLE_CLIENT_ID: !Ref GoogleClientId
+          GOOGLE_CLIENT_SECRET: !If
+            - GoogleEnabled
+            - !Sub "{{resolve:secretsmanager:${GoogleSecretArn}:SecretString:GOOGLE_CLIENT_SECRET}}"
+            - ""
+          ADMIN_EMAIL: !Ref AdminEmail
+          LISTING_PHOTOS_BUCKET: !Ref Photos
+      Events:
+        Root:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /
+            Method: ANY
+        Routes:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /{proxy+}
+            Method: ANY
+  ApiLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${Api}"
+      RetentionInDays: 7
+Outputs:
+  ApiUrl:
+    Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}"
+  PhotosBucket:
+    Value: !Ref Photos
